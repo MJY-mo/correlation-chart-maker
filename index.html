@@ -1,0 +1,1908 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>画像放り込み相関図メーカー</title>
+    <link rel="icon" href="favicon8.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/konva@9.3.6/konva.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .accordion-content.open {
+            max-height: 1000px; /* 十分な高さを確保 */
+        }
+        .konvajs-content {
+            border: 1px solid #ccc;
+            background-color: #f0f0f0;
+        }
+        .modal {
+            display: none;
+        }
+        .modal.active {
+            display: flex;
+        }
+        /* スライダーのつまみのスタイル */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #3B82F6;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        input[type=range]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #3B82F6;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div id="app" class="flex flex-col h-screen">
+        <!-- ヘッダー -->
+        <header class="bg-white shadow-md p-2 flex items-center justify-between z-10">
+            <h1 class="text-lg font-bold text-gray-700" data-lang-key="appTitle">画像放り込み相関図メーカー</h1>
+            <div class="flex items-center space-x-2">
+                <button id="fullscreen-btn" title="全画面表示" class="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm"><i class="fas fa-expand"></i></button>
+                <button id="export-button" class="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm" data-lang-key="export">画像出力</button>
+                <button id="instructions-button" class="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm" data-lang-key="instructions">操作説明</button>
+                <span class="text-gray-300">|</span>
+                <button id="save-button" class="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm" data-lang-key="save">保存</button>
+                <button id="load-button" class="px-3 py-1 bg-gray-500 hover:bg-gray-600 text-white rounded-md text-sm" data-lang-key="load">呼び出し</button>
+                <span class="text-gray-300">|</span>
+                <select id="language-switcher" class="border border-gray-300 rounded-md text-sm py-1">
+                    <option value="ja">日本語</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
+        </header>
+
+        <!-- メインコンテンツ -->
+        <div class="flex flex-1 overflow-hidden">
+            <!-- 左側UIパネル -->
+            <aside id="left-panel" class="w-80 bg-white p-4 overflow-y-auto shadow-lg flex-shrink-0">
+                
+                <!-- 通常設定パネル -->
+                <div id="main-settings-panel">
+                    <h2 class="text-base font-semibold mb-3 border-b pb-2" data-lang-key="settings">設定</h2>
+                    <!-- 関係図フィールドの設定 -->
+                    <div class="mb-4">
+                        <button class="accordion-toggle w-full text-left font-semibold p-2 bg-gray-100 rounded-md hover:bg-gray-200 flex justify-between items-center">
+                            <span data-lang-key="fieldSettings">関係図フィールドの設定</span>
+                            <span class="transform transition-transform duration-300">▼</span>
+                        </button>
+                        <div class="accordion-content">
+                            <div class="p-3 border border-t-0 rounded-b-md">
+                                <div class="space-y-3">
+                                    <div>
+                                        <label for="field-size-selector" class="block text-sm font-medium" data-lang-key="canvasSize">キャンバスサイズ</label>
+                                        <select id="field-size-selector" class="w-full border-gray-300 rounded-md shadow-sm p-1 text-sm">
+                                            <option value="square" data-lang-key="squareSize">正方形 (810x810)</option>
+                                            <option value="wide" data-lang-key="wideSize">ワイド (1440x810)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center space-x-2">
+                                            <div class="flex-shrink-0">
+                                                <label for="field-bg-color" class="block text-sm font-medium" data-lang-key="bgColor">背景色</label>
+                                                <input type="color" id="field-bg-color" class="w-12 h-8 border-gray-300 rounded-md p-0">
+                                            </div>
+                                            <div class="flex-grow">
+                                                <label for="bg-opacity" class="block text-sm font-medium"><span data-lang-key="bgOpacity">透過度</span>: <span id="bg-opacity-value">100</span>%</label>
+                                                <input type="range" id="bg-opacity" min="0" max="1" step="0.05" class="w-full">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium" data-lang-key="bgImage">背景画像</label>
+                                        <div id="bg-drop-zone" class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                                            <div class="space-y-1 text-center">
+                                                <svg class="mx-auto h-10 w-10 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 4v.01M28 8L16 20m12-12v12m0 0h12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                                                <p class="text-xs text-gray-500" data-lang-key="dropBgImage">ここに背景画像をドロップ</p>
+                                            </div>
+                                        </div>
+                                        <button id="bg-image-clear" class="mt-1 text-xs text-red-500 hover:underline" data-lang-key="clearBgImage">背景画像を消去</button>
+                                    </div>
+                                    <div id="bg-image-controls" class="hidden space-y-3">
+                                        <div>
+                                            <label for="bg-image-opacity" class="block text-sm font-medium"><span data-lang-key="bgImageOpacity">背景画像の透過度</span>: <span id="bg-image-opacity-value">100</span>%</label>
+                                            <input type="range" id="bg-image-opacity" min="0" max="1" step="0.05" class="w-full">
+                                        </div>
+                                        <div>
+                                            <label for="bg-scale" class="block text-sm font-medium"><span data-lang-key="bgScale">拡大率</span>: <span id="bg-scale-value">100</span>%</label>
+                                            <input type="range" id="bg-scale" min="0.1" max="3" step="0.05" class="w-full">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium" data-lang-key="bgPos">位置（横/縦）</label>
+                                            <div class="mt-1 space-y-1">
+                                                <div class="flex items-center">
+                                                    <span class="w-8 text-xs text-gray-500" data-lang-key="horizontal">横:</span>
+                                                    <input type="range" id="bg-pos-x" class="w-full" min="-300" max="300" step="5">
+                                                    <span id="bg-pos-x-value" class="ml-2 w-10 text-right text-xs text-gray-500">0px</span>
+                                                </div>
+                                                <div class="flex items-center">
+                                                    <span class="w-8 text-xs text-gray-500" data-lang-key="vertical">縦:</span>
+                                                    <input type="range" id="bg-pos-y" class="w-full" min="-300" max="300" step="5">
+                                                    <span id="bg-pos-y-value" class="ml-2 w-10 text-right text-xs text-gray-500">0px</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button id="reset-field-settings" class="mt-2 w-full px-3 py-1 bg-orange-500 text-white rounded-md hover:bg-orange-600 text-sm" data-lang-key="resetToDefault">デフォルトに戻す</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- メインタイルの設定 -->
+                    <div class="mb-4">
+                        <button class="accordion-toggle w-full text-left font-semibold p-2 bg-gray-100 rounded-md hover:bg-gray-200 flex justify-between items-center">
+                            <span data-lang-key="mainTileSettings">メインタイルの設定</span>
+                            <span class="transform transition-transform duration-300">▼</span>
+                        </button>
+                        <div class="accordion-content">
+                           <div class="p-3 border border-t-0 rounded-b-md">
+                                <div class="space-y-3">
+                                    <div>
+                                        <label for="a-tile-size" class="block text-sm font-medium" data-lang-key="tileSize">タイルサイズ (px)</label>
+                                        <input type="number" id="a-tile-size" class="w-full border-gray-300 rounded-md shadow-sm p-1 text-sm">
+                                    </div>
+                                    <div>
+                                        <label for="a-tile-shape" class="block text-sm font-medium" data-lang-key="tileShape">タイル形状</label>
+                                        <select id="a-tile-shape" class="w-full border-gray-300 rounded-md shadow-sm p-1 text-sm">
+                                            <option value="circle" data-lang-key="shapeCircle">円形</option>
+                                            <option value="rounded-rect" data-lang-key="shapeRoundedRect">角丸四角形</option>
+                                            <option value="pentagon" data-lang-key="shapePentagon">五角形</option>
+                                            <option value="hexagon" data-lang-key="shapeHexagon">六角形</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center space-x-2">
+                                            <div class="flex-shrink-0">
+                                                <label for="a-fill-color" class="block text-sm font-medium" data-lang-key="tileColor">タイルの色</label>
+                                                <input type="color" id="a-fill-color" class="w-12 h-8 border-gray-300 rounded-md p-0">
+                                            </div>
+                                            <div class="flex-grow">
+                                                <label for="a-fill-opacity" class="block text-sm font-medium"><span data-lang-key="tileOpacity">透過度</span>: <span id="a-fill-opacity-value">100</span>%</label>
+                                                <input type="range" id="a-fill-opacity" min="0" max="1" step="0.05" class="w-full">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center space-x-2">
+                                            <div class="flex-shrink-0">
+                                                <label for="a-border-color" class="block text-sm font-medium" data-lang-key="borderColor">枠線の色</label>
+                                                <input type="color" id="a-border-color" class="w-12 h-8 border-gray-300 rounded-md p-0">
+                                            </div>
+                                            <div class="flex-grow">
+                                                <label for="a-border-width" class="block text-sm font-medium" data-lang-key="borderWidth">枠線の太さ (px)</label>
+                                                <input type="number" id="a-border-width" min="0" class="w-full border-gray-300 rounded-md shadow-sm p-1 text-sm">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button id="reset-a-tile-settings" class="mt-2 w-full px-3 py-1 bg-orange-500 text-white rounded-md hover:bg-orange-600 text-sm" data-lang-key="resetToDefault">デフォルトに戻す</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- サブタイルの設定 -->
+                    <div class="mb-4">
+                        <button class="accordion-toggle w-full text-left font-semibold p-2 bg-gray-100 rounded-md hover:bg-gray-200 flex justify-between items-center">
+                            <span data-lang-key="subTileSettings">サブタイル共通設定</span>
+                            <span class="transform transition-transform duration-300">▼</span>
+                        </button>
+                        <div class="accordion-content">
+                           <div class="p-3 border border-t-0 rounded-b-md">
+                                <div class="space-y-3">
+                                    <div>
+                                        <label for="b-tile-size" class="block text-sm font-medium" data-lang-key="tileSize">タイルサイズ (px)</label>
+                                        <input type="number" id="b-tile-size" class="w-full border-gray-300 rounded-md shadow-sm p-1 text-sm">
+                                    </div>
+                                    <div>
+                                        <label for="b-tile-shape" class="block text-sm font-medium" data-lang-key="tileShape">タイル形状</label>
+                                        <select id="b-tile-shape" class="w-full border-gray-300 rounded-md shadow-sm p-1 text-sm">
+                                            <option value="circle" data-lang-key="shapeCircle">円形</option>
+                                            <option value="rounded-rect" data-lang-key="shapeRoundedRect">角丸四角形</option>
+                                            <option value="pentagon" data-lang-key="shapePentagon">五角形</option>
+                                            <option value="hexagon" data-lang-key="shapeHexagon">六角形</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center space-x-2">
+                                            <div class="flex-shrink-0">
+                                                <label for="b-fill-color" class="block text-sm font-medium" data-lang-key="tileColor">タイルの色</label>
+                                                <input type="color" id="b-fill-color" class="w-12 h-8 border-gray-300 rounded-md p-0">
+                                            </div>
+                                            <div class="flex-grow">
+                                                <label for="b-fill-opacity" class="block text-sm font-medium"><span data-lang-key="tileOpacity">透過度</span>: <span id="b-fill-opacity-value">100</span>%</label>
+                                                <input type="range" id="b-fill-opacity" min="0" max="1" step="0.05" class="w-full">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center space-x-2">
+                                            <div class="flex-shrink-0">
+                                                <label for="b-border-color" class="block text-sm font-medium" data-lang-key="borderColor">枠線の色</label>
+                                                <input type="color" id="b-border-color" class="w-12 h-8 border-gray-300 rounded-md p-0">
+                                            </div>
+                                            <div class="flex-grow">
+                                                <label for="b-border-width" class="block text-sm font-medium" data-lang-key="borderWidth">枠線の太さ (px)</label>
+                                                <input type="number" id="b-border-width" min="0" class="w-full border-gray-300 rounded-md shadow-sm p-1 text-sm">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button id="reset-b-tile-settings" class="mt-2 w-full px-3 py-1 bg-orange-500 text-white rounded-md hover:bg-orange-600 text-sm" data-lang-key="resetToDefault">デフォルトに戻す</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- タイル画像調整パネル (動的に内容変更) -->
+                <div id="tile-image-settings-panel" class="hidden">
+                    <button id="back-to-main-settings" class="mb-3 text-sm text-blue-600 hover:underline" data-lang-key="backToSettings">← 設定に戻る</button>
+                    <h2 id="tile-image-settings-title" class="text-base font-semibold mb-3 border-b pb-2" data-lang-key="tileImageSettings">タイル画像設定</h2>
+                    <div class="space-y-3 p-2">
+                        <div>
+                            <label for="tile-image-scale" class="block text-sm font-medium"><span data-lang-key="imageScale">拡大率</span>: <span id="tile-image-scale-value">100</span>%</label>
+                            <input type="range" id="tile-image-scale" min="0.5" max="1.5" step="0.01" value="1" class="w-full">
+                        </div>
+                        <div>
+                            <label for="tile-image-opacity" class="block text-sm font-medium"><span data-lang-key="imageOpacity">透過度</span>: <span id="tile-image-opacity-value">100</span>%</label>
+                            <input type="range" id="tile-image-opacity" min="0" max="1" step="0.05" value="1" class="w-full">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium" data-lang-key="imagePos">位置（横/縦）</label>
+                            <div class="mt-1 space-y-1">
+                                <div class="flex items-center">
+                                    <span class="w-8 text-xs text-gray-500" data-lang-key="horizontal">横:</span>
+                                    <input type="range" id="tile-image-pos-x" class="w-full" min="-100" max="100" step="1" value="0">
+                                    <span id="tile-image-pos-x-value" class="ml-2 w-10 text-right text-xs text-gray-500">0px</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <span class="w-8 text-xs text-gray-500" data-lang-key="vertical">縦:</span>
+                                    <input type="range" id="tile-image-pos-y" class="w-full" min="-100" max="100" step="1" value="0">
+                                    <span id="tile-image-pos-y-value" class="ml-2 w-10 text-right text-xs text-gray-500">0px</span>
+                                </div>
+                            </div>
+                        </div>
+                        <button id="reset-tile-image-settings" class="mt-2 w-full px-3 py-1 bg-orange-500 text-white rounded-md hover:bg-orange-600 text-sm" data-lang-key="resetToDefault">デフォルトに戻す</button>
+                    </div>
+                </div>
+                
+                <!-- 矢印・テキスト設定パネル -->
+                <div id="arrow-settings-panel" class="hidden">
+                    <button id="back-to-main-settings-from-arrow" class="mb-3 text-sm text-blue-600 hover:underline" data-lang-key="backToSettings">← 設定に戻る</button>
+                    <h2 class="text-base font-semibold mb-3 border-b pb-2" data-lang-key="arrowTextSettings">矢印・テキスト設定</h2>
+                    
+                    <!-- メイン → サブ -->
+                    <div class="mb-4 p-3 border rounded-md bg-gray-50">
+                        <h3 class="text-md font-bold mb-3 text-gray-700 flex justify-between items-center">
+                            <span data-lang-key="mainToSub">メイン → サブ</span>
+                            <label class="flex items-center space-x-2 text-sm font-normal">
+                                <input type="checkbox" id="arrow-a-to-b-visible" class="rounded">
+                                <span data-lang-key="showArrow">矢印を表示</span>
+                            </label>
+                        </h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-base font-semibold mb-1 text-blue-600" data-lang-key="descriptionText">説明テキスト</label>
+                                <input type="text" id="arrow-a-to-b-text" class="w-full border-gray-300 rounded-md shadow-sm p-2 text-base">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium" data-lang-key="fontSizeAndColor">文字サイズ・色</label>
+                                <div class="flex items-center space-x-2">
+                                    <input type="color" id="arrow-a-to-b-font-color" class="w-full h-8 border-gray-300 rounded-md">
+                                    <input type="number" id="arrow-a-to-b-font-size" min="1" class="w-20 border-gray-300 rounded-md shadow-sm p-1 text-sm">
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="flex items-center space-x-4">
+                                    <label class="flex items-center space-x-1"><input type="checkbox" id="arrow-a-to-b-font-bold" class="rounded"><span data-lang-key="bold">太字</span></label>
+                                    <label class="flex items-center space-x-1"><input type="checkbox" id="arrow-a-to-b-font-italic" class="rounded"><span data-lang-key="italic">斜体</span></label>
+                                    <label class="flex items-center space-x-1"><input type="checkbox" id="arrow-a-to-b-font-shadow" class="rounded"><span data-lang-key="shadow">影</span></label>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <label class="flex items-center space-x-1"><input type="checkbox" id="arrow-a-to-b-font-stroke" class="rounded"><span data-lang-key="stroke">縁取り</span></label>
+                                    <label for="arrow-a-to-b-stroke-color" class="text-sm sr-only" data-lang-key="strokeColor">縁取り色</label>
+                                     <input type="color" id="arrow-a-to-b-stroke-color" class="w-12 h-8 border-gray-300 rounded-md">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium" data-lang-key="colorAndWidth">矢印の色と太さ</label>
+                                <div class="flex items-center space-x-2">
+                                    <input type="color" id="arrow-a-to-b-color" class="w-full h-8 border-gray-300 rounded-md">
+                                    <input type="number" id="arrow-a-to-b-width" min="1" class="w-20 border-gray-300 rounded-md shadow-sm p-1 text-sm">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- サブ → メイン -->
+                    <div class="p-3 border rounded-md bg-gray-50">
+                        <h3 class="text-md font-bold mb-3 text-gray-700 flex justify-between items-center">
+                             <span data-lang-key="subToMain">サブ → メイン</span>
+                             <label class="flex items-center space-x-2 text-sm font-normal">
+                                <input type="checkbox" id="arrow-b-to-a-visible" class="rounded">
+                                <span data-lang-key="showArrow">矢印を表示</span>
+                            </label>
+                        </h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-base font-semibold mb-1 text-green-600" data-lang-key="descriptionText">説明テキスト</label>
+                                <input type="text" id="arrow-b-to-a-text" class="w-full border-gray-300 rounded-md shadow-sm p-2 text-base">
+                            </div>
+                             <div>
+                                <label class="block text-sm font-medium" data-lang-key="fontSizeAndColor">文字サイズ・色</label>
+                                <div class="flex items-center space-x-2">
+                                    <input type="color" id="arrow-b-to-a-font-color" class="w-full h-8 border-gray-300 rounded-md">
+                                    <input type="number" id="arrow-b-to-a-font-size" min="1" class="w-20 border-gray-300 rounded-md shadow-sm p-1 text-sm">
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="flex items-center space-x-4">
+                                    <label class="flex items-center space-x-1"><input type="checkbox" id="arrow-b-to-a-font-bold" class="rounded"><span data-lang-key="bold">太字</span></label>
+                                    <label class="flex items-center space-x-1"><input type="checkbox" id="arrow-b-to-a-font-italic" class="rounded"><span data-lang-key="italic">斜体</span></label>
+                                    <label class="flex items-center space-x-1"><input type="checkbox" id="arrow-b-to-a-font-shadow" class="rounded"><span data-lang-key="shadow">影</span></label>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                     <label class="flex items-center space-x-1"><input type="checkbox" id="arrow-b-to-a-font-stroke" class="rounded"><span data-lang-key="stroke">縁取り</span></label>
+                                     <label for="arrow-b-to-a-stroke-color" class="text-sm sr-only" data-lang-key="strokeColor">縁取り色</label>
+                                     <input type="color" id="arrow-b-to-a-stroke-color" class="w-12 h-8 border-gray-300 rounded-md">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium" data-lang-key="colorAndWidth">矢印の色と太さ</label>
+                                <div class="flex items-center space-x-2">
+                                    <input type="color" id="arrow-b-to-a-color" class="w-full h-8 border-gray-300 rounded-md">
+                                    <input type="number" id="arrow-b-to-a-width" min="1" class="w-20 border-gray-300 rounded-md shadow-sm p-1 text-sm">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                 <!-- グループ編集パネル -->
+                <div id="group-settings-panel" class="hidden">
+                    <button id="back-to-main-settings-from-group" class="mb-3 text-sm text-blue-600 hover:underline" data-lang-key="backToSettings">← 設定に戻る</button>
+                    <h2 class="text-base font-semibold mb-3 border-b pb-2" data-lang-key="groupSettings">グループ設定</h2>
+                    <div class="space-y-4 p-2">
+                        <div>
+                            <label class="block text-sm font-medium" data-lang-key="groupName">グループ名</label>
+                            <input type="text" id="group-title-text" class="w-full border-gray-300 rounded-md shadow-sm p-1 text-sm">
+                        </div>
+                         <div class="flex items-center space-x-2">
+                            <div class="flex-grow">
+                                <label class="block text-sm font-medium" data-lang-key="fontColor">文字色</label>
+                                <input type="color" id="group-font-color" class="w-full h-8 border-gray-300 rounded-md">
+                            </div>
+                            <div class="w-24">
+                                 <label class="block text-sm font-medium" data-lang-key="fontSize">サイズ</label>
+                                <input type="number" id="group-font-size" min="1" class="w-full border-gray-300 rounded-md shadow-sm p-1 text-sm">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium" data-lang-key="font">フォント</label>
+                            <select id="group-font-family" class="w-full border-gray-300 rounded-md shadow-sm p-1 text-sm">
+                                <option>Arial</option>
+                                <option>Helvetica</option>
+                                <option>Times New Roman</option>
+                                <option>Courier New</option>
+                                <option>Verdana</option>
+                            </select>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex items-center space-x-4">
+                                <label class="flex items-center space-x-1"><input type="checkbox" id="group-font-bold" class="rounded"><span data-lang-key="bold">太字</span></label>
+                                <label class="flex items-center space-x-1"><input type="checkbox" id="group-font-italic" class="rounded"><span data-lang-key="italic">斜体</span></label>
+                                <label class="flex items-center space-x-1"><input type="checkbox" id="group-font-shadow" class="rounded"><span data-lang-key="shadow">影</span></label>
+                            </div>
+                             <div class="flex items-center space-x-2">
+                                <label class="flex items-center space-x-1"><input type="checkbox" id="group-font-stroke" class="rounded"><span data-lang-key="stroke">縁取り</span></label>
+                                <label for="group-font-stroke-color" class="text-sm sr-only" data-lang-key="strokeColor">縁取り色</label>
+                                <input type="color" id="group-font-stroke-color" class="w-12 h-8 border-gray-300 rounded-md">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium" data-lang-key="groupNamePosition">グループ名の位置</label>
+                            <select id="group-title-position" class="w-full border-gray-300 rounded-md shadow-sm p-1 text-sm">
+                                <option value="top-left" data-lang-key="topLeft">左上</option>
+                                <option value="top-right" data-lang-key="topRight">右上</option>
+                                <option value="bottom-left" data-lang-key="bottomLeft">左下</option>
+                                <option value="bottom-right" data-lang-key="bottomRight">右下</option>
+                            </select>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <div class="flex-shrink-0">
+                                <label class="block text-sm font-medium" data-lang-key="strokeColorGroup">枠線色</label>
+                                <input type="color" id="group-stroke-color" class="w-12 h-8 border-gray-300 rounded-md p-0">
+                            </div>
+                            <div class="flex-grow">
+                                <label class="block text-sm font-medium" data-lang-key="borderWidth">枠線の太さ (px)</label>
+                                <input type="number" id="group-stroke-width" min="0" class="w-full border-gray-300 rounded-md shadow-sm p-1 text-sm">
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex items-center space-x-2">
+                                <div class="flex-shrink-0">
+                                    <label for="group-color" class="block text-sm font-medium" data-lang-key="bgColorGroup">背景色</label>
+                                    <input type="color" id="group-color" class="w-12 h-8 border-gray-300 rounded-md p-0">
+                                </div>
+                                <div class="flex-grow">
+                                    <label for="group-fill-opacity" class="block text-sm font-medium"><span data-lang-key="bgOpacity">背景の透過度</span>: <span id="group-fill-opacity-value">60</span>%</label>
+                                    <input type="range" id="group-fill-opacity" min="0" max="1" step="0.05" class="w-full">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 操作説明パネル -->
+                <div id="instructions-panel" class="hidden">
+                    <button id="back-to-main-settings-from-instructions" class="mb-3 text-sm text-blue-600 hover:underline" data-lang-key="backToSettings">← 設定に戻る</button>
+                    <h2 class="text-base font-semibold mb-3 border-b pb-2" data-lang-key="instructionsTitle">操作説明</h2>
+                    <div class="text-sm space-y-3" data-lang-key="instructionsContent">
+                         <p><strong>画像の追加:</strong></p>
+                         <ul class="list-disc list-inside pl-4">
+                             <li><strong>メイン画像:</strong> キャンバス中央の空の領域に画像をドラッグ＆ドロップします。</li>
+                             <li><strong>サブ画像:</strong> メイン画像が配置された後、キャンバスの好きな位置に画像をドラッグ＆ドロップすると追加されます。</li>
+                         </ul>
+                         <p class="mt-2"><strong>オブジェクトの操作:</strong></p>
+                         <ul class="list-disc list-inside pl-4">
+                             <li><strong>移動:</strong> サブタイルやグループはドラッグして移動できます。</li>
+                             <li><strong>削除:</strong> サブタイルやグループにマウスカーソルを合わせると表示される赤い「×」ボタンで削除できます。</li>
+                             <li><strong>設定の表示:</strong> サブタイルをクリックすると矢印の設定パネルが、グループをダブルクリックするとグループ設定パネルが開きます。</li>
+                         </ul>
+                         <p class="mt-2"><strong>グループの作成と編集:</strong></p>
+                         <ul class="list-disc list-inside pl-4">
+                             <li><strong>作成:</strong> キャンバスの何もない領域をドラッグして範囲を選択すると、新しいグループが作成されます。</li>
+                             <li><strong>サイズ変更:</strong> グループをクリックすると表示されるハンドルをドラッグしてサイズを変更できます。</li>
+                         </ul>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- 右側編集フィールド -->
+            <main id="canvas-container" class="flex-1 p-4 bg-gray-200 overflow-auto flex items-center justify-center">
+                <div id="konva-stage"></div>
+            </main>
+        </div>
+    </div>
+
+    <!-- 確認モーダル -->
+    <div id="confirm-modal" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
+            <h3 id="modal-title" class="text-lg font-bold mb-4" data-lang-key="confirmTitle">確認</h3>
+            <p id="modal-message" class="mb-6">メッセージ</p>
+            <div class="flex justify-end space-x-4">
+                <button id="modal-cancel" class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400" data-lang-key="cancel">いいえ</button>
+                <button id="modal-confirm" class="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600" data-lang-key="confirm">はい</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 画像出力モーダル -->
+    <div id="export-modal" class="modal fixed inset-0 bg-black bg-opacity-50 items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm">
+            <h3 class="text-lg font-bold mb-4" data-lang-key="exportTitle">画像形式を選択</h3>
+            <p class="mb-6" data-lang-key="exportMessage">出力する画像の形式を選択してください。</p>
+            <div class="flex justify-end space-x-4">
+                <button id="export-png" class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600">PNG</button>
+                <button id="export-jpeg" class="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600">JPEG</button>
+                <button id="export-cancel" class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400" data-lang-key="cancel">キャンセル</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 呼び出し機能のための非表示ファイル入力 -->
+    <input type="file" id="file-loader" class="hidden" accept=".json">
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- デフォルト状態 ---
+            const defaultAppState = {
+                field: {
+                    width: 810, height: 810, backgroundColor: '#FFFFFF',
+                    backgroundImage: null, backgroundImageSrc: null, 
+                    backgroundOpacity: 1, 
+                    backgroundImageOpacity: 1,
+                    backgroundScale: 1, backgroundPosition: { x: 0, y: 0 }
+                },
+                tileA: {
+                    konvaGroup: null, image: null, imageSrc: null,
+                    size: 120, shape: 'circle', 
+                    fillColor: '#FFFFFF', fillOpacity: 1,
+                    borderColor: '#3B82F6', borderWidth: 5,
+                    imageTransform: { scale: 1, opacity: 1, x: 0, y: 0 }
+                },
+                tileBDefaults: {
+                    size: 100, shape: 'circle',
+                    fillColor: '#FFFFFF', fillOpacity: 1,
+                    borderColor: '#4ADE80', borderWidth: 5,
+                },
+                tilesB: [],
+                arrowDefaults: {
+                    aToB: { 
+                        visible: true, color: '#3B82F6', width: 4, text: '関係', 
+                        fontSize: 20, fontColor: '#333333', fontStyle: 'normal', 
+                        hasShadow: false, hasStroke: false, strokeColor: '#FFFFFF', strokeWidth: 2
+                    },
+                    bToA: { 
+                        visible: true, color: '#4ADE80', width: 4, text: '関係', 
+                        fontSize: 20, fontColor: '#333333', fontStyle: 'normal', 
+                        hasShadow: false, hasStroke: false, strokeColor: '#FFFFFF', strokeWidth: 2
+                    }
+                },
+                arrows: [],
+                groupDefaults: {
+                    fill: '#cccccc',
+                    opacity: 0.6,
+                    stroke: '#cccccc',
+                    strokeWidth: 4,
+                    dash: [],
+                    cornerRadius: 10,
+                    title: {
+                        text: 'グループ',
+                        fontSize: 18,
+                        fontFamily: 'Arial',
+                        fill: '#333333',
+                        fontStyle: 'normal',
+                        shadowBlur: 0,
+                        position: 'top-left',
+                        hasStroke: false,
+                        strokeColor: '#FFFFFF',
+                        strokeWidth: 2
+                    }
+                },
+                groups: [],
+            };
+            
+            let appState = JSON.parse(JSON.stringify(defaultAppState));
+
+            // --- Konva.jsの初期化 ---
+            let stage = new Konva.Stage({ container: 'konva-stage', width: appState.field.width, height: appState.field.height });
+            let bgLayer = new Konva.Layer();
+            let groupLayer = new Konva.Layer();
+            let arrowLayer = new Konva.Layer();
+            let mainLayer = new Konva.Layer();
+            let arrowHeadLayer = new Konva.Layer();
+            let textLayer = new Konva.Layer();
+            let transformerLayer = new Konva.Layer();
+            stage.add(bgLayer, groupLayer, arrowLayer, mainLayer, arrowHeadLayer, textLayer, transformerLayer);
+
+            // --- DOM要素の取得 ---
+            const ui = {
+                mainSettingsPanel: document.getElementById('main-settings-panel'),
+                tileImageSettingsPanel: document.getElementById('tile-image-settings-panel'),
+                tileImageSettingsTitle: document.getElementById('tile-image-settings-title'),
+                backToMainSettings: document.getElementById('back-to-main-settings'),
+                fieldSizeSelector: document.getElementById('field-size-selector'),
+                fieldBgColor: document.getElementById('field-bg-color'),
+                bgDropZone: document.getElementById('bg-drop-zone'),
+                bgImageClear: document.getElementById('bg-image-clear'),
+                bgOpacity: document.getElementById('bg-opacity'),
+                bgScale: document.getElementById('bg-scale'),
+                bgPosX: document.getElementById('bg-pos-x'),
+                bgPosY: document.getElementById('bg-pos-y'),
+                resetFieldSettings: document.getElementById('reset-field-settings'),
+                bgOpacityValue: document.getElementById('bg-opacity-value'),
+                bgScaleValue: document.getElementById('bg-scale-value'),
+                bgPosXValue: document.getElementById('bg-pos-x-value'),
+                bgPosYValue: document.getElementById('bg-pos-y-value'),
+                aTileSize: document.getElementById('a-tile-size'),
+                aTileShape: document.getElementById('a-tile-shape'),
+                aFillColor: document.getElementById('a-fill-color'),
+                aFillOpacity: document.getElementById('a-fill-opacity'),
+                aBorderColor: document.getElementById('a-border-color'),
+                aBorderWidth: document.getElementById('a-border-width'),
+                resetATileSettings: document.getElementById('reset-a-tile-settings'),
+                aFillOpacityValue: document.getElementById('a-fill-opacity-value'),
+                bTileSize: document.getElementById('b-tile-size'),
+                bTileShape: document.getElementById('b-tile-shape'),
+                bFillColor: document.getElementById('b-fill-color'),
+                bFillOpacity: document.getElementById('b-fill-opacity'),
+                bBorderColor: document.getElementById('b-border-color'),
+                bBorderWidth: document.getElementById('b-border-width'),
+                resetBTileSettings: document.getElementById('reset-b-tile-settings'),
+                bFillOpacityValue: document.getElementById('b-fill-opacity-value'),
+                tileImageScale: document.getElementById('tile-image-scale'),
+                tileImageOpacity: document.getElementById('tile-image-opacity'),
+                tileImagePosX: document.getElementById('tile-image-pos-x'),
+                tileImagePosY: document.getElementById('tile-image-pos-y'),
+                tileImageScaleValue: document.getElementById('tile-image-scale-value'),
+                tileImageOpacityValue: document.getElementById('tile-image-opacity-value'),
+                tileImagePosXValue: document.getElementById('tile-image-pos-x-value'),
+                tileImagePosYValue: document.getElementById('tile-image-pos-y-value'),
+                resetTileImageSettings: document.getElementById('reset-tile-image-settings'),
+                arrowSettingsPanel: document.getElementById('arrow-settings-panel'),
+                backToMainFromArrow: document.getElementById('back-to-main-settings-from-arrow'),
+                arrowAToBVisible: document.getElementById('arrow-a-to-b-visible'),
+                arrowAToBColor: document.getElementById('arrow-a-to-b-color'),
+                arrowAToBWidth: document.getElementById('arrow-a-to-b-width'),
+                arrowAToBText: document.getElementById('arrow-a-to-b-text'),
+                arrowAToBFontSize: document.getElementById('arrow-a-to-b-font-size'),
+                arrowAToBFontColor: document.getElementById('arrow-a-to-b-font-color'),
+                arrowAToBFontBold: document.getElementById('arrow-a-to-b-font-bold'),
+                arrowAToBFontItalic: document.getElementById('arrow-a-to-b-font-italic'),
+                arrowAToBFontShadow: document.getElementById('arrow-a-to-b-font-shadow'),
+                arrowAToBFontStroke: document.getElementById('arrow-a-to-b-font-stroke'),
+                arrowAToBStrokeColor: document.getElementById('arrow-a-to-b-stroke-color'),
+                arrowBToAVisible: document.getElementById('arrow-b-to-a-visible'),
+                arrowBToAColor: document.getElementById('arrow-b-to-a-color'),
+                arrowBToAWidth: document.getElementById('arrow-b-to-a-width'),
+                arrowBToAText: document.getElementById('arrow-b-to-a-text'),
+                arrowBToAFontSize: document.getElementById('arrow-b-to-a-font-size'),
+                arrowBToAFontColor: document.getElementById('arrow-b-to-a-font-color'),
+                arrowBToAFontBold: document.getElementById('arrow-b-to-a-font-bold'),
+                arrowBToAFontItalic: document.getElementById('arrow-b-to-a-font-italic'),
+                arrowBToAFontShadow: document.getElementById('arrow-b-to-a-font-shadow'),
+                arrowBToAFontStroke: document.getElementById('arrow-b-to-a-font-stroke'),
+                arrowBToAStrokeColor: document.getElementById('arrow-b-to-a-stroke-color'),
+                groupSettingsPanel: document.getElementById('group-settings-panel'),
+                backToMainFromGroup: document.getElementById('back-to-main-settings-from-group'),
+                groupTitleText: document.getElementById('group-title-text'),
+                groupColor: document.getElementById('group-color'),
+                groupStrokeColor: document.getElementById('group-stroke-color'),
+                groupStrokeWidth: document.getElementById('group-stroke-width'),
+                groupFillOpacity: document.getElementById('group-fill-opacity'),
+                groupFillOpacityValue: document.getElementById('group-fill-opacity-value'),
+                groupFontColor: document.getElementById('group-font-color'),
+                groupFontFamily: document.getElementById('group-font-family'),
+                groupFontSize: document.getElementById('group-font-size'),
+                groupFontBold: document.getElementById('group-font-bold'),
+                groupFontItalic: document.getElementById('group-font-italic'),
+                groupFontShadow: document.getElementById('group-font-shadow'),
+                groupFontStroke: document.getElementById('group-font-stroke'),
+                groupFontStrokeColor: document.getElementById('group-font-stroke-color'),
+                groupTitlePosition: document.getElementById('group-title-position'),
+                canvasContainer: document.getElementById('canvas-container'),
+                confirmModal: document.getElementById('confirm-modal'),
+                modalTitle: document.getElementById('modal-title'),
+                modalMessage: document.getElementById('modal-message'),
+                modalConfirm: document.getElementById('modal-confirm'),
+                modalCancel: document.getElementById('modal-cancel'),
+                exportModal: document.getElementById('export-modal'),
+                exportPngButton: document.getElementById('export-png'),
+                exportJpegButton: document.getElementById('export-jpeg'),
+                exportCancelButton: document.getElementById('export-cancel'),
+                fullscreenButton: document.getElementById('fullscreen-btn'),
+                saveButton: document.getElementById('save-button'),
+                loadButton: document.getElementById('load-button'),
+                exportButton: document.getElementById('export-button'),
+                instructionsButton: document.getElementById('instructions-button'),
+                instructionsPanel: document.getElementById('instructions-panel'),
+                backToMainFromInstructions: document.getElementById('back-to-main-settings-from-instructions'),
+                languageSwitcher: document.getElementById('language-switcher'),
+                fileLoader: document.getElementById('file-loader'),
+                bgImageControls: document.getElementById('bg-image-controls'),
+                bgImageOpacity: document.getElementById('bg-image-opacity'),
+                bgImageOpacityValue: document.getElementById('bg-image-opacity-value'),
+            };
+
+            let modalConfirmAction = null;
+            let currentlyEditingTile = null;
+            let currentlyEditingArrows = null;
+            let currentlyEditingGroup = null;
+            let selectionRectangle = new Konva.Rect({ visible: false });
+            transformerLayer.add(selectionRectangle);
+            let x1, y1;
+            
+            const transformer = new Konva.Transformer({
+                nodes: [],
+                keepRatio: false,
+                borderDash: [3, 3],
+            });
+            transformerLayer.add(transformer);
+
+            // --- UI更新関数 ---
+            const updateAllUIFromState = () => {
+                ui.fieldSizeSelector.value = appState.field.width === 810 ? 'square' : 'wide';
+                ui.fieldBgColor.value = appState.field.backgroundColor;
+                ui.bgOpacity.value = appState.field.backgroundOpacity;
+                ui.bgImageOpacity.value = appState.field.backgroundImageOpacity;
+                ui.bgScale.value = appState.field.backgroundScale;
+                ui.bgPosX.value = appState.field.backgroundPosition.x;
+                ui.bgPosY.value = appState.field.backgroundPosition.y;
+                ui.aTileSize.value = appState.tileA.size;
+                ui.aTileShape.value = appState.tileA.shape;
+                ui.aFillColor.value = appState.tileA.fillColor;
+                ui.aFillOpacity.value = appState.tileA.fillOpacity;
+                ui.aBorderColor.value = appState.tileA.borderColor;
+                ui.aBorderWidth.value = appState.tileA.borderWidth;
+                ui.bTileSize.value = appState.tileBDefaults.size;
+                ui.bTileShape.value = appState.tileBDefaults.shape;
+                ui.bFillColor.value = appState.tileBDefaults.fillColor;
+                ui.bFillOpacity.value = appState.tileBDefaults.fillOpacity;
+                ui.bBorderColor.value = appState.tileBDefaults.borderColor;
+                ui.bBorderWidth.value = appState.tileBDefaults.borderWidth;
+                updateSliderValueLabels();
+            };
+
+            const updateSliderValueLabels = () => {
+                ui.bgOpacityValue.textContent = Math.round(appState.field.backgroundOpacity * 100);
+                ui.bgImageOpacityValue.textContent = Math.round(appState.field.backgroundImageOpacity * 100);
+                ui.bgScaleValue.textContent = Math.round(appState.field.backgroundScale * 100);
+                ui.bgPosXValue.textContent = `${appState.field.backgroundPosition.x}px`;
+                ui.bgPosYValue.textContent = `${appState.field.backgroundPosition.y}px`;
+                ui.aFillOpacityValue.textContent = Math.round(appState.tileA.fillOpacity * 100);
+                ui.bFillOpacityValue.textContent = Math.round(appState.tileBDefaults.fillOpacity * 100);
+                if (currentlyEditingTile) {
+                    const transform = (currentlyEditingTile === 'A') ? appState.tileA.imageTransform : currentlyEditingTile.imageTransform;
+                    ui.tileImageScaleValue.textContent = Math.round(transform.scale * 100);
+                    ui.tileImageOpacityValue.textContent = Math.round(transform.opacity * 100);
+                    ui.tileImagePosXValue.textContent = `${transform.x}px`;
+                    ui.tileImagePosYValue.textContent = `${transform.y}px`;
+                }
+                if (currentlyEditingGroup) {
+                    ui.groupFillOpacityValue.textContent = Math.round(currentlyEditingGroup.opacity * 100);
+                }
+            };
+            
+            // --- 描画関連の関数 ---
+            const updateBackground = () => {
+                bgLayer.destroyChildren();
+                const bgRect = new Konva.Rect({
+                    x: 0, y: 0, 
+                    width: stage.width(), 
+                    height: stage.height(), 
+                    fill: appState.field.backgroundColor, 
+                    opacity: appState.field.backgroundOpacity,
+                    name: 'background-rect' 
+                });
+                bgLayer.add(bgRect);
+                if (appState.field.backgroundImage) {
+                    const img = appState.field.backgroundImage;
+                    const scale = appState.field.backgroundScale;
+                    const stageWidth = stage.width();
+                    const stageHeight = stage.height();
+                    const imgRatio = img.width / img.height;
+                    const stageRatio = stageWidth / stageHeight;
+                    let newWidth, newHeight;
+                    if (stageRatio > imgRatio) { newHeight = stageHeight * scale; newWidth = newHeight * imgRatio; } 
+                    else { newWidth = stageWidth * scale; newHeight = newWidth / imgRatio; }
+                    const bgImage = new Konva.Image({ image: img, x: (stageWidth - newWidth) / 2 + appState.field.backgroundPosition.x, y: (stageHeight - newHeight) / 2 + appState.field.backgroundPosition.y, width: newWidth, height: newHeight, opacity: appState.field.backgroundImageOpacity, name: 'background-rect' });
+                    bgLayer.add(bgImage);
+                }
+                bgLayer.draw();
+            };
+            
+            const commonShapeFunc = (context, shape, size) => {
+                const s = size / 2;
+                context.beginPath();
+                switch (shape) {
+                    case 'circle': context.arc(0, 0, s, 0, Math.PI * 2, false); break;
+                    case 'rounded-rect':
+                        const r = size * 0.1;
+                        context.moveTo(-s + r, -s); context.lineTo(s - r, -s);
+                        context.arcTo(s, -s, s, -s + r, r); context.lineTo(s, s - r);
+                        context.arcTo(s, s, s - r, s, r); context.lineTo(-s + r, s);
+                        context.arcTo(-s, s, -s, s - r, r); context.lineTo(-s, -s + r);
+                        context.arcTo(-s, -s, -s + r, -s, r);
+                        break;
+                    case 'pentagon':
+                        for (let i = 0; i < 5; i++) { const a = (i / 5) * 2 * Math.PI - Math.PI / 2; context[i === 0 ? 'moveTo' : 'lineTo'](s * Math.cos(a), s * Math.sin(a)); } 
+                        break;
+                        case 'hexagon':
+                        for (let i = 0; i < 6; i++) { const a = (i / 6) * 2 * Math.PI; context[i === 0 ? 'moveTo' : 'lineTo'](s * Math.cos(a), s * Math.sin(a)); } 
+                        break;
+                }
+                context.closePath();
+            };
+
+            const createOrUpdateTileA = () => {
+                if (!appState.tileA.image) return;
+                if (appState.tileA.konvaGroup) appState.tileA.konvaGroup.destroy();
+                const group = new Konva.Group({ x: stage.width() / 2, y: stage.height() / 2, draggable: false, id: 'tileA' });
+                const tileAState = appState.tileA;
+                const size = tileAState.size;
+                const img = tileAState.image;
+                const transform = tileAState.imageTransform;
+                const imgRatio = img.width / img.height;
+                let baseImgWidth, baseImgHeight;
+                if (img.width > img.height) { baseImgWidth = size; baseImgHeight = size / imgRatio; } 
+                else { baseImgHeight = size; baseImgWidth = size * imgRatio; }
+                const fillShape = new Konva.Shape({ fill: tileAState.fillColor, opacity: tileAState.fillOpacity, sceneFunc: (ctx, s) => { commonShapeFunc(ctx, tileAState.shape, size); ctx.fillStrokeShape(s); } });
+                const imageNode = new Konva.Image({ image: img, x: -baseImgWidth / 2, y: -baseImgHeight / 2, width: baseImgWidth, height: baseImgHeight, scaleX: transform.scale, scaleY: transform.scale, offsetX: -transform.x / transform.scale, offsetY: -transform.y / transform.scale, opacity: transform.opacity });
+                const borderShape = new Konva.Shape({ stroke: tileAState.borderColor, strokeWidth: tileAState.borderWidth, sceneFunc: (ctx, s) => { commonShapeFunc(ctx, tileAState.shape, size); ctx.fillStrokeShape(s); } });
+                group.clipFunc((ctx) => { commonShapeFunc(ctx, tileAState.shape, size); });
+                group.on('dblclick dbltap', () => openImageEditor('A'));
+                group.add(fillShape, imageNode, borderShape);
+                mainLayer.add(group);
+                appState.tileA.konvaGroup = group;
+                mainLayer.batchDraw();
+            };
+            
+            const createOrUpdateAllBTiles = () => {
+                appState.tilesB.forEach(bState => createOrUpdateTileB(bState));
+            };
+
+            const createOrUpdateTileB = (bState) => {
+                if (bState.konvaGroup) bState.konvaGroup.destroy();
+                const wrapperGroup = new Konva.Group({ x: bState.x, y: bState.y, draggable: true, id: bState.id });
+                const tileGroup = new Konva.Group();
+                const commonSettings = appState.tileBDefaults;
+                const size = commonSettings.size;
+                const img = bState.image;
+                const transform = bState.imageTransform;
+                const imgRatio = img.width / img.height;
+                let baseImgWidth, baseImgHeight;
+                if (img.width > img.height) { baseImgWidth = size; baseImgHeight = size / imgRatio; } 
+                else { baseImgHeight = size; baseImgWidth = size * imgRatio; }
+                const fillShape = new Konva.Shape({ fill: commonSettings.fillColor, opacity: commonSettings.fillOpacity, sceneFunc: (ctx, s) => { commonShapeFunc(ctx, commonSettings.shape, size); ctx.fillStrokeShape(s); } });
+                const imageNode = new Konva.Image({ image: img, x: -baseImgWidth / 2, y: -baseImgHeight / 2, width: baseImgWidth, height: baseImgHeight, scaleX: transform.scale, scaleY: transform.scale, offsetX: -transform.x / transform.scale, offsetY: -transform.y / transform.scale, opacity: transform.opacity });
+                const borderShape = new Konva.Shape({ stroke: commonSettings.borderColor, strokeWidth: commonSettings.borderWidth, sceneFunc: (ctx, s) => { commonShapeFunc(ctx, commonSettings.shape, size); ctx.fillStrokeShape(s); } });
+                tileGroup.clipFunc((ctx) => { commonShapeFunc(ctx, commonSettings.shape, size); });
+                tileGroup.add(fillShape, imageNode, borderShape);
+                const btnOffset = 12;
+                const deleteBtn = new Konva.Circle({ x: size / 2 - btnOffset, y: -size / 2 + btnOffset, radius: 10, fill: 'red', stroke: 'white', strokeWidth: 2, visible: false, name: 'delete-button' });
+                const deleteIcon = new Konva.Text({ x: size / 2 - btnOffset - 5, y: -size / 2 + btnOffset - 6, text: '×', fontSize: 12, fill: 'white', listening: false, visible: false, name: 'delete-icon' });
+                wrapperGroup.on('mouseenter', () => {
+                    deleteBtn.visible(true); deleteIcon.visible(true);
+                    stage.container().style.cursor = 'pointer'; mainLayer.batchDraw();
+                });
+                wrapperGroup.on('mouseleave', () => {
+                    deleteBtn.visible(false); deleteIcon.visible(false);
+                    stage.container().style.cursor = 'default'; mainLayer.batchDraw();
+                });
+                wrapperGroup.on('dragend', (e) => { 
+                    bState.x = e.target.x(); 
+                    bState.y = e.target.y(); 
+                    updateArrowsForTile(bState);
+                });
+                wrapperGroup.on('dragmove', () => updateArrowsForTile(bState));
+                wrapperGroup.on('dblclick dbltap', () => openImageEditor(bState));
+                wrapperGroup.on('click tap', (e) => {
+                    if (e.target.hasName('delete-button')) return;
+                    openArrowEditor(bState);
+                });
+                deleteBtn.on('click tap', () => {
+                    showModal('confirmDeleteSubTile', () => {
+                        if (currentlyEditingArrows && currentlyEditingArrows.some(a => a.to === bState.id || a.from === bState.id)) {
+                            closePanels();
+                        }
+                        appState.arrows = appState.arrows.filter(a => a.from !== bState.id && a.to !== bState.id);
+                        appState.tilesB = appState.tilesB.filter(tile => tile.id !== bState.id);
+                        wrapperGroup.destroy();
+                        updateAllArrows();
+                        mainLayer.batchDraw();
+                    });
+                });
+                wrapperGroup.add(tileGroup, deleteBtn, deleteIcon);
+                mainLayer.add(wrapperGroup);
+                bState.konvaGroup = wrapperGroup;
+                mainLayer.batchDraw();
+            };
+
+            const updateAllArrows = () => {
+                arrowLayer.destroyChildren();
+                arrowHeadLayer.destroyChildren();
+                textLayer.destroyChildren();
+                appState.arrows.forEach(arrowState => drawArrow(arrowState));
+                arrowLayer.batchDraw();
+                arrowHeadLayer.batchDraw();
+                textLayer.batchDraw();
+            };
+
+            const updateArrowsForTile = (tileState) => {
+                const connectedArrows = appState.arrows.filter(a => a.from === tileState.id || a.to === tileState.id);
+                connectedArrows.forEach(arrowState => drawArrow(arrowState));
+                arrowLayer.batchDraw();
+                arrowHeadLayer.batchDraw();
+                textLayer.batchDraw();
+            };
+
+            const drawArrow = (arrowState) => {
+                if (arrowState.konvaLine) arrowState.konvaLine.destroy();
+                if (arrowState.konvaHead) arrowState.konvaHead.destroy();
+                if (arrowState.konvaText) arrowState.konvaText.destroy();
+
+                const fromNode = stage.findOne('#' + arrowState.from);
+                const toNode = stage.findOne('#' + arrowState.to);
+                if (!fromNode || !toNode) return;
+
+                const from = fromNode.position();
+                const to = toNode.position();
+                const dx = to.x - from.x;
+                const dy = to.y - from.y;
+                const angle = Math.atan2(dy, dx);
+                
+                const fromRadius = (arrowState.from === 'tileA' ? appState.tileA.size : appState.tileBDefaults.size) / 2;
+                const toTileSize = (arrowState.to === 'tileA' ? appState.tileA.size : appState.tileBDefaults.size);
+                const toRadius = toTileSize / 2;
+                
+                const fromX = from.x + fromRadius * Math.cos(angle);
+                const fromY = from.y + fromRadius * Math.sin(angle);
+                
+                const clearance = toTileSize * 0.05;
+                const effectiveToRadius = toRadius + clearance;
+                
+                const toX = to.x - effectiveToRadius * Math.cos(angle);
+                const toY = to.y - effectiveToRadius * Math.sin(angle);
+
+                const pairArrow = appState.arrows.find(a => a.from === arrowState.to && a.to === arrowState.from);
+                const offset = (arrowState.visible && pairArrow && pairArrow.visible) ? 10 : 0;
+
+                const offsetX = offset * Math.sin(angle);
+                const offsetY = -offset * Math.cos(angle);
+                
+                const pointerLength = Math.max(10, 4 * arrowState.width);
+                const pointerWidth = Math.max(10, 4 * arrowState.width);
+
+                const lineEndX = toX - pointerLength * Math.cos(angle);
+                const lineEndY = toY - pointerLength * Math.sin(angle);
+                const points = [fromX + offsetX, fromY + offsetY, lineEndX + offsetX, lineEndY + offsetY];
+                const line = new Konva.Line({ points, stroke: arrowState.color, strokeWidth: arrowState.width, visible: arrowState.visible, lineCap: 'round' });
+                arrowLayer.add(line);
+                arrowState.konvaLine = line;
+
+                const head = new Konva.Path({
+                    x: toX + offsetX,
+                    y: toY + offsetY,
+                    data: `M0 0 L-${pointerLength} -${pointerWidth / 2} L-${pointerLength} ${pointerWidth / 2} Z`,
+                    fill: arrowState.color,
+                    rotation: angle * (180 / Math.PI),
+                    visible: arrowState.visible,
+                });
+                arrowHeadLayer.add(head);
+                arrowState.konvaHead = head;
+                
+                let textRotation = angle * (180 / Math.PI);
+                if (textRotation > 90 || textRotation < -90) {
+                    textRotation += 180;
+                }
+
+                const text = new Konva.Text({
+                    text: arrowState.text,
+                    fontSize: arrowState.fontSize,
+                    fill: arrowState.fontColor,
+                    fontStyle: arrowState.fontStyle,
+                    shadowColor: arrowState.hasShadow ? 'rgba(0,0,0,0.5)' : 'transparent',
+                    shadowBlur: arrowState.hasShadow ? 5 : 0,
+                    shadowOffsetX: arrowState.hasShadow ? 2 : 0,
+                    shadowOffsetY: arrowState.hasShadow ? 2 : 0,
+                    stroke: arrowState.hasStroke ? arrowState.strokeColor : null,
+                    strokeWidth: arrowState.hasStroke ? arrowState.strokeWidth : 0,
+                    rotation: textRotation,
+                    visible: arrowState.visible,
+                });
+                
+                const textAnchorX = (fromX + offsetX + lineEndX + offsetX) / 2;
+                const textAnchorY = (fromY + offsetY + lineEndY + offsetY) / 2;
+                
+                const pushDistance = (arrowState.width / 2) + 15;
+                
+                const perpAngle = angle - Math.PI / 2;
+
+                const textPushX = Math.cos(perpAngle) * pushDistance;
+                const textPushY = Math.sin(perpAngle) * pushDistance;
+                
+                text.position({
+                    x: textAnchorX + textPushX,
+                    y: textAnchorY + textPushY
+                });
+                
+                text.offsetX(text.width() / 2);
+                text.offsetY(text.height() / 2);
+
+                textLayer.add(text);
+                arrowState.konvaText = text;
+            };
+            
+            const createOrUpdateGroup = (groupState) => {
+                if(groupState.konvaGroup) groupState.konvaGroup.destroy();
+
+                const group = new Konva.Group({
+                    x: groupState.x,
+                    y: groupState.y,
+                    width: groupState.width,
+                    height: groupState.height,
+                    draggable: true,
+                    id: groupState.id,
+                    name: 'group-wrapper'
+                });
+
+                const rect = new Konva.Rect({
+                    width: groupState.width,
+                    height: groupState.height,
+                    fill: groupState.fill,
+                    opacity: groupState.opacity,
+                    stroke: groupState.stroke,
+                    strokeWidth: groupState.strokeWidth,
+                    dash: groupState.dash,
+                    cornerRadius: groupState.cornerRadius,
+                    name: 'group-rect'
+                });
+
+                const title = groupState.title;
+                const text = new Konva.Text({
+                    text: title.text,
+                    fontSize: title.fontSize,
+                    fontFamily: title.fontFamily,
+                    fill: title.fill,
+                    fontStyle: title.fontStyle,
+                    shadowColor: title.shadowBlur > 0 ? 'black' : 'transparent',
+                    shadowBlur: title.shadowBlur,
+                    shadowOffsetX: 2,
+                    shadowOffsetY: 2,
+                    padding: 5,
+                    stroke: title.hasStroke ? title.strokeColor : null,
+                    strokeWidth: title.hasStroke ? title.strokeWidth : 0,
+                });
+                
+                const pos = title.position;
+                if (pos === 'top-right') text.x(groupState.width - text.width() - 5);
+                if (pos === 'bottom-left') text.y(groupState.height - text.height() - 5);
+                if (pos === 'bottom-right') {
+                    text.x(groupState.width - text.width() - 5);
+                    text.y(groupState.height - text.height() - 5);
+                }
+
+                const deleteBtn = new Konva.Circle({ x: groupState.width, y: 0, radius: 10, fill: 'red', stroke: 'white', strokeWidth: 2, visible: false, name: 'delete-button' });
+                const deleteIcon = new Konva.Text({ x: groupState.width - 5, y: -6, text: '×', fontSize: 12, fill: 'white', listening: false, visible: false, name: 'delete-icon' });
+
+                group.on('mouseenter', () => { deleteBtn.visible(true); deleteIcon.visible(true); stage.container().style.cursor = 'pointer'; groupLayer.batchDraw(); });
+                group.on('mouseleave', () => { deleteBtn.visible(false); deleteIcon.visible(false); stage.container().style.cursor = 'default'; groupLayer.batchDraw(); });
+                group.on('dblclick dbltap', () => openGroupEditor(groupState));
+                group.on('click tap', (e) => {
+                    if (e.target.hasName('delete-button')) return;
+                    transformer.nodes([group]);
+                    transformerLayer.batchDraw();
+                });
+                 group.on('dragend', (e) => {
+                    groupState.x = e.target.x();
+                    groupState.y = e.target.y();
+                });
+                deleteBtn.on('click tap', () => {
+                    showModal('confirmDeleteGroup', () => {
+                        if (currentlyEditingGroup && currentlyEditingGroup.id === groupState.id) {
+                            closePanels();
+                        }
+                        appState.groups = appState.groups.filter(g => g.id !== groupState.id);
+                        group.destroy();
+                        transformer.nodes([]);
+                        groupLayer.batchDraw();
+                        transformerLayer.batchDraw();
+                    });
+                });
+                
+                group.on('transformend', (e) => {
+                    const node = e.target;
+                    groupState.x = node.x();
+                    groupState.y = node.y();
+                    groupState.width = node.width() * node.scaleX();
+                    groupState.height = node.height() * node.scaleY();
+                    node.scaleX(1);
+                    node.scaleY(1);
+
+                    node.width(groupState.width);
+                    node.height(groupState.height);
+                    
+                    const rect = node.findOne('.group-rect');
+                    rect.width(groupState.width);
+                    rect.height(groupState.height);
+
+                    const text = node.findOne('Text');
+                    const deleteBtn = node.findOne('.delete-button');
+                    const deleteIcon = node.findOne('.delete-icon');
+
+                    const pos = groupState.title.position;
+                    text.x(0); text.y(0);
+                    if (pos === 'top-right') text.x(groupState.width - text.width() - 5);
+                    if (pos === 'bottom-left') text.y(groupState.height - text.height() - 5);
+                    if (pos === 'bottom-right') {
+                        text.x(groupState.width - text.width() - 5);
+                        text.y(groupState.height - text.height() - 5);
+                    }
+                    
+                    deleteBtn.x(groupState.width);
+                    deleteBtn.y(0);
+                    deleteIcon.x(groupState.width - 5);
+                    deleteIcon.y(-6);
+
+                    groupLayer.batchDraw();
+                    
+                    transformer.nodes([]);
+                    transformerLayer.batchDraw();
+                });
+
+                group.add(rect, text, deleteBtn, deleteIcon);
+                groupLayer.add(group);
+                groupState.konvaGroup = group;
+                groupLayer.batchDraw();
+            };
+
+            // --- UI パネルとモーダルの管理 ---
+            const showPanel = (panelToShow, editingTarget) => {
+                ui.mainSettingsPanel.classList.add('hidden');
+                ui.tileImageSettingsPanel.classList.add('hidden');
+                ui.arrowSettingsPanel.classList.add('hidden');
+                ui.groupSettingsPanel.classList.add('hidden');
+                ui.instructionsPanel.classList.add('hidden');
+
+                if (panelToShow) {
+                    panelToShow.classList.remove('hidden');
+                } else {
+                    ui.mainSettingsPanel.classList.remove('hidden');
+                }
+                updateActiveButtonState();
+            };
+
+            const updateActiveButtonState = () => {
+                ui.instructionsButton.classList.remove('bg-green-500');
+                ui.instructionsButton.classList.add('bg-gray-500', 'hover:bg-gray-600');
+
+                if (!ui.instructionsPanel.classList.contains('hidden')) {
+                    ui.instructionsButton.classList.remove('bg-gray-500', 'hover:bg-gray-600');
+                    ui.instructionsButton.classList.add('bg-green-500');
+                }
+            };
+
+            const openImageEditor = (tileStateOrType) => {
+                showPanel(ui.tileImageSettingsPanel);
+                currentlyEditingTile = tileStateOrType;
+                
+                const isMain = currentlyEditingTile === 'A';
+                const titleKey = isMain ? 'mainTileImageSettings' : 'subTileImageSettings';
+                ui.tileImageSettingsTitle.textContent = translations[ui.languageSwitcher.value][titleKey];
+                const transform = isMain ? appState.tileA.imageTransform : currentlyEditingTile.imageTransform;
+                
+                ui.tileImageScale.value = transform.scale;
+                ui.tileImageOpacity.value = transform.opacity;
+                ui.tileImagePosX.value = transform.x;
+                ui.tileImagePosY.value = transform.y;
+                updateSliderValueLabels();
+            };
+
+            const closePanels = () => {
+                showPanel(null);
+                currentlyEditingTile = null;
+                currentlyEditingArrows = null;
+                currentlyEditingGroup = null;
+            };
+
+            const showModal = (messageKey, onConfirm) => {
+                const lang = ui.languageSwitcher.value;
+                ui.modalMessage.textContent = translations[lang][messageKey] || messageKey;
+                modalConfirmAction = onConfirm;
+                ui.confirmModal.classList.add('active');
+            };
+
+            const openArrowEditor = (bState) => {
+                showPanel(ui.arrowSettingsPanel);
+                currentlyEditingArrows = appState.arrows.filter(a => a.from === bState.id || a.to === bState.id);
+                
+                if (currentlyEditingArrows.length !== 2) {
+                    closePanels(); 
+                    return;
+                }
+                
+                const aToB = currentlyEditingArrows.find(a => a.from === 'tileA');
+                const bToA = currentlyEditingArrows.find(a => a.from === bState.id);
+                ui.arrowAToBVisible.checked = aToB.visible;
+                ui.arrowAToBColor.value = aToB.color;
+                ui.arrowAToBWidth.value = aToB.width;
+                ui.arrowAToBText.value = aToB.text;
+                ui.arrowAToBFontSize.value = aToB.fontSize;
+                ui.arrowAToBFontColor.value = aToB.fontColor;
+                ui.arrowAToBFontBold.checked = aToB.fontStyle.includes('bold');
+                ui.arrowAToBFontItalic.checked = aToB.fontStyle.includes('italic');
+                ui.arrowAToBFontShadow.checked = aToB.hasShadow;
+                ui.arrowAToBFontStroke.checked = aToB.hasStroke;
+                ui.arrowAToBStrokeColor.value = aToB.strokeColor;
+
+                ui.arrowBToAVisible.checked = bToA.visible;
+                ui.arrowBToAColor.value = bToA.color;
+                ui.arrowBToAWidth.value = bToA.width;
+                ui.arrowBToAText.value = bToA.text;
+                ui.arrowBToAFontSize.value = bToA.fontSize;
+                ui.arrowBToAFontColor.value = bToA.fontColor;
+                ui.arrowBToAFontBold.checked = bToA.fontStyle.includes('bold');
+                ui.arrowBToAFontItalic.checked = bToA.fontStyle.includes('italic');
+                ui.arrowBToAFontShadow.checked = bToA.hasShadow;
+                ui.arrowBToAFontStroke.checked = bToA.hasStroke;
+                ui.arrowBToAStrokeColor.value = bToA.strokeColor;
+            };
+
+            const openGroupEditor = (groupState) => {
+                showPanel(ui.groupSettingsPanel);
+                currentlyEditingGroup = groupState;
+                const title = groupState.title;
+                
+                ui.groupTitleText.value = title.text;
+                ui.groupColor.value = groupState.fill;
+                ui.groupStrokeColor.value = groupState.stroke;
+                ui.groupStrokeWidth.value = groupState.strokeWidth;
+                ui.groupFillOpacity.value = groupState.opacity;
+                ui.groupFillOpacityValue.textContent = Math.round(groupState.opacity * 100);
+                ui.groupFontColor.value = title.fill;
+                ui.groupFontFamily.value = title.fontFamily;
+                ui.groupFontSize.value = title.fontSize;
+                ui.groupFontBold.checked = title.fontStyle.includes('bold');
+                ui.groupFontItalic.checked = title.fontStyle.includes('italic');
+                ui.groupFontShadow.checked = title.shadowBlur > 0;
+                ui.groupFontStroke.checked = title.hasStroke;
+                ui.groupFontStrokeColor.value = title.strokeColor;
+                ui.groupTitlePosition.value = title.position;
+            };
+            
+            const openInstructionsPanel = () => {
+                showPanel(ui.instructionsPanel);
+            };
+
+            const getEventType = (input) => {
+                if (['range', 'color', 'text', 'number'].includes(input.type)) {
+                    return 'input';
+                }
+                return 'change';
+            };
+
+            // --- UIイベントハンドラ ---
+            const setupEventListeners = () => {
+                document.querySelectorAll('.accordion-toggle').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const content = button.nextElementSibling;
+                        const icon = button.querySelector('span:last-child');
+                        content.classList.toggle('open');
+                        icon.classList.toggle('rotate-180');
+                    });
+                });
+
+                ui.backToMainSettings.addEventListener('click', closePanels);
+                ui.backToMainFromArrow.addEventListener('click', closePanels);
+                ui.backToMainFromGroup.addEventListener('click', closePanels);
+                ui.backToMainFromInstructions.addEventListener('click', closePanels);
+
+                ui.fieldSizeSelector.addEventListener('change', (e) => {
+                    const oldWidth = appState.field.width;
+                    const newSizeValue = e.target.value;
+                    const newWidth = newSizeValue === 'square' ? 810 : 1440;
+
+                    appState.field.width = newWidth;
+                    stage.width(newWidth);
+
+                    if (oldWidth === 1440 && newWidth === 810) {
+                        appState.tilesB.forEach(bState => {
+                            if (bState.x > newWidth) {
+                                const tileSize = appState.tileBDefaults.size;
+                                bState.x = newWidth - (tileSize / 2) - 10;
+                                if (bState.konvaGroup) {
+                                    bState.konvaGroup.x(bState.x);
+                                }
+                            }
+                        });
+                        appState.groups.forEach(groupState => {
+                            if (groupState.x + groupState.width > newWidth) {
+                                groupState.x = Math.max(0, newWidth - groupState.width - 10);
+                                if (groupState.konvaGroup) {
+                                    groupState.konvaGroup.x(groupState.x);
+                                }
+                            }
+                        });
+                        mainLayer.batchDraw();
+                        groupLayer.batchDraw();
+                        updateAllArrows();
+                    }
+                    
+                    updateBackground();
+                    if(appState.tileA.konvaGroup) { 
+                        appState.tileA.konvaGroup.position({ x: stage.width() / 2, y: stage.height() / 2 }); 
+                        mainLayer.batchDraw();
+                        updateAllArrows();
+                    }
+                });
+
+                const fieldInputs = [ui.fieldBgColor, ui.bgOpacity, ui.bgImageOpacity, ui.bgScale, ui.bgPosX, ui.bgPosY];
+                fieldInputs.forEach(input => {
+                    const eventType = getEventType(input);
+                    input.addEventListener(eventType, (e) => {
+                        switch(e.target.id) {
+                            case 'field-bg-color': appState.field.backgroundColor = e.target.value; break;
+                            case 'bg-opacity': appState.field.backgroundOpacity = parseFloat(e.target.value); break;
+                            case 'bg-image-opacity': appState.field.backgroundImageOpacity = parseFloat(e.target.value); break;
+                            case 'bg-scale': appState.field.backgroundScale = parseFloat(e.target.value); break;
+                            case 'bg-pos-x': appState.field.backgroundPosition.x = parseInt(e.target.value, 10); break;
+                            case 'bg-pos-y': appState.field.backgroundPosition.y = parseInt(e.target.value, 10); break;
+                        }
+                        updateSliderValueLabels();
+                        updateBackground();
+                    });
+                });
+                ui.bgImageClear.addEventListener('click', () => { 
+                    appState.field.backgroundImage = null; 
+                    appState.field.backgroundImageSrc = null; 
+                    ui.bgImageControls.classList.add('hidden');
+                    updateBackground(); 
+                });
+                ui.resetFieldSettings.addEventListener('click', () => {
+                    showModal('confirmResetSettings', () => {
+                        const currentImage = appState.field.backgroundImage;
+                        const currentImageSrc = appState.field.backgroundImageSrc;
+                        appState.field = JSON.parse(JSON.stringify(defaultAppState.field));
+                        appState.field.backgroundImage = currentImage;
+                        appState.field.backgroundImageSrc = currentImageSrc;
+                        updateAllUIFromState();
+                        stage.width(appState.field.width); stage.height(appState.field.height);
+                        updateBackground();
+                        if(appState.tileA.konvaGroup) { appState.tileA.konvaGroup.position({ x: stage.width() / 2, y: stage.height() / 2 }); }
+                        mainLayer.batchDraw();
+                        updateAllArrows();
+                    });
+                });
+
+                const aTileInputs = [ui.aTileSize, ui.aTileShape, ui.aFillColor, ui.aFillOpacity, ui.aBorderColor, ui.aBorderWidth];
+                aTileInputs.forEach(input => {
+                    const eventType = getEventType(input);
+                    input.addEventListener(eventType, (e) => {
+                        const tileA = appState.tileA;
+                        switch(e.target.id) {
+                            case 'a-tile-size': tileA.size = parseInt(e.target.value, 10); break;
+                            case 'a-tile-shape': tileA.shape = e.target.value; break;
+                            case 'a-fill-color': tileA.fillColor = e.target.value; break;
+                            case 'a-fill-opacity': tileA.fillOpacity = parseFloat(e.target.value); break;
+                            case 'a-border-color': tileA.borderColor = e.target.value; break;
+                            case 'a-border-width': tileA.borderWidth = parseInt(e.target.value, 10); break;
+                        }
+                        updateSliderValueLabels();
+                        createOrUpdateTileA();
+                        updateAllArrows();
+                    });
+                });
+                ui.resetATileSettings.addEventListener('click', () => {
+                     showModal('confirmResetSettings', () => {
+                        const {konvaGroup, image, imageSrc} = appState.tileA;
+                        appState.tileA = JSON.parse(JSON.stringify(defaultAppState.tileA));
+                        appState.tileA.konvaGroup = konvaGroup; appState.tileA.image = image; appState.tileA.imageSrc = imageSrc;
+                        updateAllUIFromState();
+                        createOrUpdateTileA();
+                        updateAllArrows();
+                    });
+                });
+
+                const bTileInputs = [ui.bTileSize, ui.bTileShape, ui.bFillColor, ui.bFillOpacity, ui.bBorderColor, ui.bBorderWidth];
+                bTileInputs.forEach(input => {
+                    const eventType = getEventType(input);
+                    input.addEventListener(eventType, (e) => {
+                        const settings = appState.tileBDefaults;
+                        switch(e.target.id) {
+                            case 'b-tile-size': settings.size = parseInt(e.target.value, 10); break;
+                            case 'b-tile-shape': settings.shape = e.target.value; break;
+                            case 'b-fill-color': settings.fillColor = e.target.value; break;
+                            case 'b-fill-opacity': settings.fillOpacity = parseFloat(e.target.value); break;
+                            case 'b-border-color': settings.borderColor = e.target.value; break;
+                            case 'b-border-width': settings.borderWidth = parseInt(e.target.value, 10); break;
+                        }
+                        updateSliderValueLabels();
+                        createOrUpdateAllBTiles();
+                        updateAllArrows();
+                    });
+                });
+                ui.resetBTileSettings.addEventListener('click', () => {
+                    showModal('confirmResetSettings', () => {
+                        appState.tileBDefaults = JSON.parse(JSON.stringify(defaultAppState.tileBDefaults));
+                        updateAllUIFromState();
+                        createOrUpdateAllBTiles();
+                        updateAllArrows();
+                    });
+                });
+
+                const imageEditorInputs = [ui.tileImageScale, ui.tileImageOpacity, ui.tileImagePosX, ui.tileImagePosY];
+                imageEditorInputs.forEach(input => {
+                    input.addEventListener('input', (e) => {
+                        if (!currentlyEditingTile) return;
+                        const isMain = currentlyEditingTile === 'A';
+                        const tileState = isMain ? appState.tileA : currentlyEditingTile;
+                        const transform = tileState.imageTransform;
+                        switch(e.target.id) {
+                            case 'tile-image-scale': transform.scale = parseFloat(e.target.value); break;
+                            case 'tile-image-opacity': transform.opacity = parseFloat(e.target.value); break;
+                            case 'tile-image-pos-x': transform.x = parseInt(e.target.value, 10); break;
+                            case 'tile-image-pos-y': transform.y = parseInt(e.target.value, 10); break;
+                        }
+                        updateSliderValueLabels();
+                        if (isMain) createOrUpdateTileA();
+                        else createOrUpdateTileB(tileState);
+                    });
+                });
+                ui.resetTileImageSettings.addEventListener('click', () => {
+                     showModal('confirmResetSettings', () => {
+                        if (!currentlyEditingTile) return;
+                        const isMain = currentlyEditingTile === 'A';
+                        const tileState = isMain ? appState.tileA : currentlyEditingTile;
+                        tileState.imageTransform = JSON.parse(JSON.stringify(defaultAppState.tileA.imageTransform));
+                        const transform = tileState.imageTransform;
+                        ui.tileImageScale.value = transform.scale;
+                        ui.tileImageOpacity.value = transform.opacity;
+                        ui.tileImagePosX.value = transform.x;
+                        ui.tileImagePosY.value = transform.y;
+                        updateSliderValueLabels();
+                        if (isMain) createOrUpdateTileA();
+                        else createOrUpdateTileB(tileState);
+                    });
+                });
+
+                const arrowInputs = [
+                    ui.arrowAToBVisible, ui.arrowAToBColor, ui.arrowAToBWidth, ui.arrowAToBText, ui.arrowAToBFontSize, ui.arrowAToBFontColor, ui.arrowAToBFontBold, ui.arrowAToBFontItalic, ui.arrowAToBFontShadow, ui.arrowAToBFontStroke, ui.arrowAToBStrokeColor,
+                    ui.arrowBToAVisible, ui.arrowBToAColor, ui.arrowBToAWidth, ui.arrowBToAText, ui.arrowBToAFontSize, ui.arrowBToAFontColor, ui.arrowBToAFontBold, ui.arrowBToAFontItalic, ui.arrowBToAFontShadow, ui.arrowBToAFontStroke, ui.arrowBToAStrokeColor,
+                ];
+                arrowInputs.forEach(input => {
+                    input.addEventListener(getEventType(input), (e) => {
+                        if (!currentlyEditingArrows) return;
+                        const id = e.target.id;
+                        let targetArrowState, prop, otherCheckboxes;
+
+                        if (id.includes('-a-to-b-')) {
+                            targetArrowState = currentlyEditingArrows.find(a => a.from === 'tileA');
+                            prop = id.substring(id.indexOf('-a-to-b-') + 8);
+                            otherCheckboxes = { bold: ui.arrowAToBFontBold, italic: ui.arrowAToBFontItalic };
+                        } else if (id.includes('-b-to-a-')) {
+                            targetArrowState = currentlyEditingArrows.find(a => a.to === 'tileA');
+                            prop = id.substring(id.indexOf('-b-to-a-') + 8);
+                             otherCheckboxes = { bold: ui.arrowBToAFontBold, italic: ui.arrowBToAFontItalic };
+                        }
+
+                        if (!targetArrowState) return;
+                        let value;
+                        if (e.target.type === 'checkbox') value = e.target.checked;
+                        else if (e.target.type === 'number') value = parseInt(e.target.value, 10) || 1;
+                        else value = e.target.value;
+
+                        const keyMap = { 'font-size': 'fontSize', 'font-color': 'fontColor', 'stroke-color': 'strokeColor', 'font-bold': 'fontStyle', 'font-italic': 'fontStyle', 'font-shadow': 'hasShadow', 'font-stroke': 'hasStroke' };
+                        const finalProp = keyMap[prop] || prop;
+
+                        if (finalProp === 'fontStyle') {
+                            const isBold = otherCheckboxes.bold.checked;
+                            const isItalic = otherCheckboxes.italic.checked;
+                            if (isBold && isItalic) targetArrowState.fontStyle = 'bold italic';
+                            else if (isBold) targetArrowState.fontStyle = 'bold';
+                            else if (isItalic) targetArrowState.fontStyle = 'italic';
+                            else targetArrowState.fontStyle = 'normal';
+                        } else {
+                            targetArrowState[finalProp] = value;
+                        }
+
+                        const pairArrow = appState.arrows.find(a => a.from === targetArrowState.to && a.to === targetArrowState.from);
+                        drawArrow(targetArrowState);
+                        if(pairArrow) drawArrow(pairArrow);
+
+                        arrowLayer.batchDraw();
+                        arrowHeadLayer.batchDraw();
+                        textLayer.batchDraw();
+                    });
+                });
+
+                const groupInputs = [ui.groupTitleText, ui.groupColor, ui.groupStrokeColor, ui.groupStrokeWidth, ui.groupFillOpacity, ui.groupFontColor, ui.groupFontFamily, ui.groupFontSize, ui.groupFontBold, ui.groupFontItalic, ui.groupFontShadow, ui.groupFontStroke, ui.groupFontStrokeColor, ui.groupTitlePosition];
+                groupInputs.forEach(input => {
+                    input.addEventListener(getEventType(input), (e) => {
+                        if (!currentlyEditingGroup) return;
+                        const title = currentlyEditingGroup.title;
+                        switch(e.target.id) {
+                            case 'group-title-text': title.text = e.target.value; break;
+                            case 'group-color': currentlyEditingGroup.fill = e.target.value; break;
+                            case 'group-stroke-color': currentlyEditingGroup.stroke = e.target.value; break;
+                            case 'group-stroke-width': currentlyEditingGroup.strokeWidth = parseInt(e.target.value, 10); break;
+                            case 'group-fill-opacity': currentlyEditingGroup.opacity = parseFloat(e.target.value); break;
+                            case 'group-font-color': title.fill = e.target.value; break;
+                            case 'group-font-family': title.fontFamily = e.target.value; break;
+                            case 'group-font-size': title.fontSize = parseInt(e.target.value, 10); break;
+                            case 'group-title-position': title.position = e.target.value; break;
+                            case 'group-font-shadow': title.shadowBlur = e.target.checked ? 5 : 0; break;
+                            case 'group-font-stroke': title.hasStroke = e.target.checked; break;
+                            case 'group-font-stroke-color': title.strokeColor = e.target.value; break;
+                        }
+
+                        const isBold = ui.groupFontBold.checked;
+                        const isItalic = ui.groupFontItalic.checked;
+                        if (isBold && isItalic) title.fontStyle = 'bold italic';
+                        else if (isBold) title.fontStyle = 'bold';
+                        else if (isItalic) title.fontStyle = 'italic';
+                        else title.fontStyle = 'normal';
+                        
+                        updateSliderValueLabels();
+                        createOrUpdateGroup(currentlyEditingGroup);
+                    });
+                });
+
+                ui.fullscreenButton.addEventListener('click', toggleFullscreen);
+                document.addEventListener('fullscreenchange', updateFullscreenButton);
+
+                ui.modalCancel.addEventListener('click', () => { ui.confirmModal.classList.remove('active'); modalConfirmAction = null; });
+                ui.modalConfirm.addEventListener('click', () => {
+                    if (modalConfirmAction) modalConfirmAction();
+                    ui.confirmModal.classList.remove('active');
+                    modalConfirmAction = null;
+                });
+
+                ui.exportButton.addEventListener('click', () => ui.exportModal.classList.add('active'));
+                ui.exportCancelButton.addEventListener('click', () => ui.exportModal.classList.remove('active'));
+                ui.exportPngButton.addEventListener('click', () => handleExport('png'));
+                ui.exportJpegButton.addEventListener('click', () => handleExport('jpeg'));
+
+                ui.saveButton.addEventListener('click', handleSave);
+                ui.loadButton.addEventListener('click', () => ui.fileLoader.click());
+                ui.fileLoader.addEventListener('change', handleLoad);
+                ui.instructionsButton.addEventListener('click', openInstructionsPanel);
+                ui.languageSwitcher.addEventListener('change', (e) => switchLanguage(e.target.value));
+            };
+
+            const createArrowsForTile = (bState) => {
+                const aToB = { id: `arrow-${bState.id}-1`, from: 'tileA', to: bState.id, ...JSON.parse(JSON.stringify(defaultAppState.arrowDefaults.aToB)) };
+                const bToA = { id: `arrow-${bState.id}-2`, from: bState.id, to: 'tileA', ...JSON.parse(JSON.stringify(defaultAppState.arrowDefaults.bToA)) };
+                appState.arrows.push(aToB, bToA);
+                drawArrow(aToB);
+                drawArrow(bToA);
+                arrowLayer.batchDraw();
+                arrowHeadLayer.batchDraw();
+                textLayer.batchDraw();
+            };
+
+            // --- ドラッグ＆ドロップ処理 ---
+            const setupDragAndDrop = () => {
+                const container = stage.container();
+                container.addEventListener('dragover', (e) => { e.preventDefault(); });
+                container.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    stage.setPointersPositions(e);
+                    const file = e.dataTransfer.files[0];
+                    if (!file || !file.type.startsWith('image/')) return;
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const pointerPos = stage.getPointerPosition();
+                            const shape = stage.getIntersection(pointerPos);
+                            if (appState.tileA.konvaGroup && shape && shape.findAncestor('Group') === appState.tileA.konvaGroup) {
+                                showModal('confirmReplaceMainImage', () => {
+                                    appState.tileA.image = img;
+                                    appState.tileA.imageSrc = event.target.result;
+                                    appState.tileA.imageTransform = JSON.parse(JSON.stringify(defaultAppState.tileA.imageTransform));
+                                    updateAllUIFromState();
+                                    createOrUpdateTileA();
+                                });
+                            } else if (!appState.tileA.image) {
+                                appState.tileA.image = img;
+                                appState.tileA.imageSrc = event.target.result;
+                                createOrUpdateTileA();
+                            } else {
+                                const newB = {
+                                    id: 'b-' + Date.now(), konvaGroup: null, image: img, imageSrc: event.target.result,
+                                    x: pointerPos.x, y: pointerPos.y,
+                                    imageTransform: JSON.parse(JSON.stringify(defaultAppState.tileA.imageTransform))
+                                };
+                                appState.tilesB.push(newB);
+                                createOrUpdateTileB(newB);
+                                createArrowsForTile(newB);
+                            }
+                        };
+                        img.src = event.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                });
+                const bgDropZone = ui.bgDropZone;
+                bgDropZone.addEventListener('dragenter', (e) => { e.preventDefault(); e.stopPropagation(); bgDropZone.classList.add('bg-blue-100'); });
+                bgDropZone.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); bgDropZone.classList.remove('bg-blue-100'); });
+                bgDropZone.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); });
+                bgDropZone.addEventListener('drop', (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    bgDropZone.classList.remove('bg-blue-100');
+                    const file = e.dataTransfer.files[0];
+                    if (file && file.type.startsWith('image/')) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                            const img = new Image();
+                            img.onload = () => {
+                                appState.field.backgroundImage = img;
+                                appState.field.backgroundImageSrc = event.target.result;
+                                ui.bgImageControls.classList.remove('hidden'); 
+                                updateBackground();
+                            };
+                            img.src = event.target.result;
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+            };
+
+            stage.on('mousedown', (e) => {
+                const clickedOnEmpty = e.target === stage || e.target.name() === 'background-rect';
+                if (clickedOnEmpty) {
+                    transformer.nodes([]);
+                    transformerLayer.batchDraw();
+                    
+                    e.evt.preventDefault();
+                    const pos = stage.getPointerPosition();
+                    x1 = pos.x;
+                    y1 = pos.y;
+                    selectionRectangle.visible(true);
+                    selectionRectangle.width(0);
+                    selectionRectangle.height(0);
+                    transformerLayer.batchDraw();
+                }
+            });
+
+            stage.on('mousemove', (e) => {
+                if (!selectionRectangle.visible()) return;
+                e.evt.preventDefault();
+                const pos = stage.getPointerPosition();
+                const x2 = pos.x;
+                const y2 = pos.y;
+                selectionRectangle.setAttrs({
+                    x: Math.min(x1, x2),
+                    y: Math.min(y1, y2),
+                    width: Math.abs(x2 - x1),
+                    height: Math.abs(y2 - y1),
+                    fill: 'rgba(0, 161, 255, 0.3)',
+                    stroke: 'rgba(0, 161, 255, 0.7)',
+                    strokeWidth: 1,
+                });
+                transformerLayer.batchDraw();
+            });
+
+            stage.on('mouseup', (e) => {
+                if (!selectionRectangle.visible()) return;
+                e.evt.preventDefault();
+                selectionRectangle.visible(false);
+                transformerLayer.batchDraw();
+                const box = selectionRectangle.getClientRect();
+                if (box.width < 10 || box.height < 10) return;
+                
+                const newGroupState = {
+                    id: 'group-' + Date.now(),
+                    konvaGroup: null,
+                    x: box.x,
+                    y: box.y,
+                    width: box.width,
+                    height: box.height,
+                    ...JSON.parse(JSON.stringify(appState.groupDefaults))
+                };
+                appState.groups.push(newGroupState);
+                createOrUpdateGroup(newGroupState);
+                openGroupEditor(newGroupState);
+            });
+
+            // --- 保存・呼び出し・出力機能の実装 ---
+            const handleExport = (format) => {
+                ui.exportModal.classList.remove('active');
+                const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+                const extension = format === 'jpeg' ? 'jpeg' : 'png';
+
+                transformer.nodes([]);
+                transformerLayer.batchDraw();
+                mainLayer.find('.delete-button, .delete-icon').forEach(node => node.visible(false));
+                groupLayer.find('.delete-button, .delete-icon').forEach(node => node.visible(false));
+                mainLayer.batchDraw();
+                groupLayer.batchDraw();
+
+                setTimeout(() => {
+                    const dataURL = stage.toDataURL({ mimeType, pixelRatio: 2 });
+                    const link = document.createElement('a');
+                    link.download = `correlation-diagram.${extension}`;
+                    link.href = dataURL;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }, 100);
+            };
+
+            const handleSave = () => {
+                const saveData = {
+                    ...appState,
+                    field: { ...appState.field, backgroundImage: undefined },
+                    tileA: { ...appState.tileA, konvaGroup: undefined, image: undefined },
+                    tilesB: appState.tilesB.map(b => ({ ...b, konvaGroup: undefined, image: undefined })),
+                    arrows: appState.arrows.map(a => ({ ...a, konvaLine: undefined, konvaHead: undefined, konvaText: undefined })),
+                    groups: appState.groups.map(g => ({ ...g, konvaGroup: undefined })),
+                };
+
+                const jsonString = JSON.stringify(saveData, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.download = 'chart-data.json';
+                link.href = url;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            };
+
+            const handleLoad = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const loadedData = JSON.parse(event.target.result);
+                        showModal('confirmLoad', () => {
+                            loadStateFromData(loadedData);
+                        });
+                    } catch (error) {
+                        alert('ファイルの読み込みに失敗しました。有効なJSONファイルではありません。');
+                        console.error("JSON Parse Error:", error);
+                    }
+                };
+                reader.readAsText(file);
+                e.target.value = '';
+            };
+
+            const loadStateFromData = async (data) => {
+                stage.destroyChildren();
+                bgLayer = new Konva.Layer();
+                groupLayer = new Konva.Layer();
+                arrowLayer = new Konva.Layer();
+                mainLayer = new Konva.Layer();
+                arrowHeadLayer = new Konva.Layer();
+                textLayer = new Konva.Layer();
+                transformerLayer = new Konva.Layer();
+                stage.add(bgLayer, groupLayer, arrowLayer, mainLayer, arrowHeadLayer, textLayer, transformerLayer);
+                transformerLayer.add(transformer);
+                transformerLayer.add(selectionRectangle);
+
+                appState = JSON.parse(JSON.stringify(defaultAppState));
+                
+                const loadImage = (src) => {
+                    return new Promise((resolve, reject) => {
+                        if (!src) { resolve(null); return; }
+                        const img = new Image();
+                        img.onload = () => resolve(img);
+                        img.onerror = reject;
+                        img.src = src;
+                    });
+                };
+
+                try {
+                    const bgImage = await loadImage(data.field.backgroundImageSrc);
+                    const tileAImage = await loadImage(data.tileA.imageSrc);
+                    const tilesBImages = await Promise.all(data.tilesB.map(b => loadImage(b.imageSrc)));
+
+                    appState = data;
+                    appState.field.backgroundImage = bgImage;
+                    appState.tileA.image = tileAImage;
+                    appState.tilesB.forEach((b, index) => { b.image = tilesBImages[index]; });
+                    
+                    if (appState.field.backgroundImage) {
+                        ui.bgImageControls.classList.remove('hidden');
+                    } else {
+                        ui.bgImageControls.classList.add('hidden');
+                    }
+
+                    updateAllUIFromState();
+                    stage.width(appState.field.width);
+                    stage.height(appState.field.height);
+                    updateBackground();
+                    createOrUpdateTileA();
+                    createOrUpdateAllBTiles();
+                    appState.groups.forEach(createOrUpdateGroup);
+                    updateAllArrows();
+
+                } catch (error) {
+                    alert('画像の読み込み中にエラーが発生しました。');
+                    console.error("Image loading error:", error);
+                }
+            };
+
+            const translations = {
+                ja: {
+                    appTitle: "画像放り込み相関図メーカー", save: "保存", load: "呼び出し", export: "画像出力", instructions: "操作説明",
+                    settings: "設定", fieldSettings: "関係図フィールドの設定", canvasSize: "キャンバスサイズ", squareSize: "正方形 (810x810)", wideSize: "ワイド (1440x810)",
+                    bgColor: "背景色", bgImage: "背景画像", dropBgImage: "ここに背景画像をドロップ", clearBgImage: "背景画像を消去", bgOpacity: "透過度", bgImageOpacity: "背景画像の透過度", bgScale: "拡大率", bgPosX: "位置 X", bgPosY: "位置 Y",
+                    resetToDefault: "デフォルトに戻す", mainTileSettings: "メインタイルの設定", tileSize: "タイルサイズ (px)", tileShape: "タイル形状",
+                    shapeCircle: "円形", shapeRoundedRect: "角丸四角形", shapePentagon: "五角形", shapeHexagon: "六角形", tileColor: "タイルの色",
+                    tileOpacity: "透過度", borderColor: "枠線の色", borderWidth: "枠線の太さ (px)", subTileSettings: "サブタイル共通設定",
+                    backToSettings: "← 設定に戻る", tileImageSettings: "タイル画像設定", mainTileImageSettings: "メインタイル画像設定", subTileImageSettings: "サブタイル画像設定",
+                    imageScale: "拡大率", imageOpacity: "透過度", imagePos: "位置（横/縦）", imagePosX: "位置 X", imagePosY: "位置 Y", horizontal: "横", vertical: "縦", bgPos: "位置（横/縦）",
+                    arrowTextSettings: "矢印・テキスト設定", mainToSub: "メイン → サブ", descriptionText: "説明テキスト", showArrow: "矢印を表示",
+                    colorAndWidth: "矢印の色と太さ", fontSizeAndColor: "文字サイズ・色", subToMain: "サブ → メイン", groupSettings: "グループ設定",
+                    groupName: "グループ名", color: "色", fontColor: "文字色", font: "フォント", fontSize: "サイズ", bold: "太字", italic: "斜体", shadow: "影",
+                    groupNamePosition: "グループ名の位置", topLeft: "左上", topRight: "右上", bottomLeft: "左下", bottomRight: "右下",
+                    confirmTitle: "確認", cancel: "キャンセル", confirm: "はい", confirmDeleteSubTile: "このサブタイルを削除しますか？",
+                    confirmDeleteGroup: "このグループを削除しますか？", confirmReplaceMainImage: "メインタイルの画像を入れ替えますか？",
+                    confirmLoad: "現在の作業内容は破棄されます。読み込みますか？",
+                    confirmResetSettings: "この項目の設定をデフォルトに戻しますか？",
+                    instructionsTitle: "操作説明",
+                    instructionsContent: `<p><strong>画像の追加:</strong></p><ul class="list-disc list-inside pl-4"><li><strong>メイン画像:</strong> キャンバス中央の空の領域に画像をドラッグ＆ドロップします。配置済みのメインタイル上にドロップすると画像を入れ替えられます。</li><li><strong>サブ画像:</strong> メイン画像が配置された後、キャンバスの好きな位置に画像をドラッグ＆ドロップすると追加されます。</li></ul><p class="mt-2"><strong>グループの作成と編集:</strong></p><ul class="list-disc list-inside pl-4"><li><strong>作成:</strong> キャンバスの何もない領域をドラッグして範囲を選択すると、新しいグループが作成されます。</li><li><strong>サイズ変更:</strong> グループをクリックすると表示されるハンドルをドラッグしてサイズを変更できます。</li></ul><p class="mt-2"><strong>オブジェクトの操作:</strong></p><ul class="list-disc list-inside pl-4"><li><strong>移動:</strong> サブタイルやグループはドラッグして移動できます。</li><li><strong>削除:</strong> サブタイルやグループにマウスカーソルを合わせると表示される赤い「×」ボタンで削除できます。</li><li><strong>設定の表示:</strong> サブタイルをクリックすると矢印の設定パネルが開きます。タイル（メインまたはサブ）をダブルクリックすると、タイル内の画像を調整するパネルが開きます。グループをダブルクリックするとグループ設定パネルが開きます。</li></ul>`,
+                    exportTitle: "画像形式を選択", exportMessage: "出力する画像の形式を選択してください。",
+                    fullscreenEnter: "全画面表示",
+                    fullscreenExit: "全画面解除",
+                    stroke: "縁取り", strokeColor: "縁取り色", strokeColorGroup: "枠線色", bgColorGroup: "背景色",
+                },
+                en: {
+                    appTitle: "Correlation Chart Maker", save: "Save", load: "Load", export: "Export Image", instructions: "Instructions",
+                    settings: "Settings", fieldSettings: "Field Settings", canvasSize: "Canvas Size", squareSize: "Square (810x810)", wideSize: "Wide (1440x810)",
+                    bgColor: "Background Color", bgImage: "Background Image", dropBgImage: "Drop background image here", clearBgImage: "Clear background image", bgOpacity: "Opacity", bgImageOpacity: "Background Image Opacity", bgScale: "Scale", bgPosX: "Position X", bgPosY: "Position Y",
+                    resetToDefault: "Reset to Default", mainTileSettings: "Main Tile Settings", tileSize: "Tile Size (px)", tileShape: "Tile Shape",
+                    shapeCircle: "Circle", shapeRoundedRect: "Rounded Rectangle", shapePentagon: "Pentagon", shapeHexagon: "Hexagon", tileColor: "Tile Color",
+                    tileOpacity: "Opacity", borderColor: "Border Color", borderWidth: "Border Width (px)", subTileSettings: "Sub Tile Settings",
+                    backToSettings: "← Back to Settings", tileImageSettings: "Tile Image Settings", mainTileImageSettings: "Main Tile Image Settings", subTileImageSettings: "Sub Tile Image Settings",
+                    imageScale: "Scale", imageOpacity: "Opacity", imagePos: "Position (H/V)", imagePosX: "Position X", imagePosY: "Position Y", horizontal: "H", vertical: "V", bgPos: "Position (H/V)",
+                    arrowTextSettings: "Arrow & Text Settings", mainToSub: "Main → Sub", descriptionText: "Description Text", showArrow: "Show Arrow",
+                    colorAndWidth: "Arrow Color & Width", fontSizeAndColor: "Font Size & Color", subToMain: "Sub → Main", groupSettings: "Group Settings",
+                    groupName: "Group Name", color: "Color", fontColor: "Font Color", font: "Font", fontSize: "Size", bold: "Bold", italic: "Italic", shadow: "Shadow",
+                    groupNamePosition: "Group Name Position", topLeft: "Top Left", topRight: "Top Right", bottomLeft: "Bottom Left", bottomRight: "Bottom Right",
+                    confirmTitle: "Confirm", cancel: "Cancel", confirm: "Yes", confirmDeleteSubTile: "Are you sure you want to delete this sub tile?",
+                    confirmDeleteGroup: "Are you sure you want to delete this group?", confirmReplaceMainImage: "Are you sure you want to replace the main image?",
+                    confirmLoad: "Current work will be discarded. Do you want to load the file?",
+                    confirmResetSettings: "Are you sure you want to reset these settings to default?",
+                    instructionsTitle: "Instructions",
+                    instructionsContent: `<p><strong>Adding Images:</strong></p><ul class="list-disc list-inside pl-4"><li><strong>Main Image:</strong> Drag & drop an image onto the empty center of the canvas. Dropping an image onto the existing main tile will replace it.</li><li><strong>Sub Images:</strong> After the main image is placed, drag & drop images anywhere on the canvas to add them.</li></ul><p class="mt-2"><strong>Group Creation & Editing:</strong></p><ul class="list-disc list-inside pl-4"><li><strong>Create:</strong> Drag on an empty area of the canvas to select a region and create a new group.</li><li><strong>Resize:</strong> Click a group to show handles, then drag the handles to resize it.</li></ul><p class="mt-2"><strong>Object Operations:</strong></p><ul class="list-disc list-inside pl-4"><li><strong>Move:</strong> Drag sub tiles or groups to move them.</li><li><strong>Delete:</strong> Hover over a sub tile or group and click the red '×' button to delete it.</li><li><strong>Open Settings:</strong> Click a sub tile to open the arrow settings panel. Double-click any tile (main or sub) to open the image adjustment panel. Double-click a group to open the group settings panel.</li></ul>`,
+                    exportTitle: "Select Image Format", exportMessage: "Please select the format for the exported image.",
+                    fullscreenEnter: "Fullscreen",
+                    fullscreenExit: "Exit Fullscreen",
+                    stroke: "Stroke", strokeColor: "Stroke Color", strokeColorGroup: "Border Color", bgColorGroup: "Background Color",
+                }
+            };
+
+            const switchLanguage = (lang) => {
+                document.querySelectorAll('[data-lang-key]').forEach(el => {
+                    const key = el.dataset.langKey;
+                    if (translations[lang] && translations[lang][key]) {
+                        if (key === 'instructionsContent') {
+                            el.innerHTML = translations[lang][key];
+                        } else {
+                            el.textContent = translations[lang][key];
+                        }
+                    }
+                });
+                updateFullscreenButton();
+            };
+
+            // --- Fullscreen ---
+            function toggleFullscreen() {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(err => {
+                        console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+                    });
+                } else {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    }
+                }
+            }
+
+            function updateFullscreenButton() {
+                const btn = ui.fullscreenButton;
+                if(!btn) return;
+                const icon = btn.querySelector('i');
+                const lang = ui.languageSwitcher.value;
+                if (document.fullscreenElement) {
+                    icon.classList.remove('fa-expand');
+                    icon.classList.add('fa-compress');
+                    btn.title = translations[lang]['fullscreenExit'];
+                } else {
+                    icon.classList.remove('fa-compress');
+                    icon.classList.add('fa-expand');
+                    btn.title = translations[lang]['fullscreenEnter'];
+                }
+            }
+
+            // --- 初期化処理 ---
+            const init = () => {
+                updateAllUIFromState();
+                updateBackground();
+                setupEventListeners();
+                setupDragAndDrop();
+                // document.querySelectorAll('.accordion-toggle').forEach(b => b.click());
+                switchLanguage('ja');
+                updateFullscreenButton();
+            };
+
+            init();
+        });
+    </script>
+</body>
+</html>
+
