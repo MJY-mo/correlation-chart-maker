@@ -1270,39 +1270,64 @@
                     const oldWidth = appState.field.width;
                     const newSizeValue = e.target.value;
                     const newWidth = newSizeValue === 'square' ? 810 : 1440;
+                    
+                    const widthChange = newWidth - oldWidth;
+                    const shiftX = widthChange / 2;
 
                     appState.field.width = newWidth;
                     stage.width(newWidth);
 
-                    if (oldWidth === 1440 && newWidth === 810) {
-                        appState.tilesB.forEach(bState => {
-                            if (bState.x > newWidth) {
-                                const tileSize = appState.tileBDefaults.size;
-                                bState.x = newWidth - (tileSize / 2) - 10;
-                                if (bState.konvaGroup) {
-                                    bState.konvaGroup.x(bState.x);
-                                }
+                    // Shift and constrain all sub-tiles
+                    appState.tilesB.forEach(bState => {
+                        bState.x += shiftX;
+                        
+                        // When shrinking, ensure tiles are within bounds
+                        if (widthChange < 0) {
+                            const radius = appState.tileBDefaults.size / 2;
+                            const padding = 10; // 10px padding from the edge
+                            if (bState.x - radius < padding) {
+                                bState.x = radius + padding;
                             }
-                        });
-                        appState.groups.forEach(groupState => {
-                            if (groupState.x + groupState.width > newWidth) {
-                                groupState.x = Math.max(0, newWidth - groupState.width - 10);
-                                if (groupState.konvaGroup) {
-                                    groupState.konvaGroup.x(groupState.x);
-                                }
+                            if (bState.x + radius > newWidth - padding) {
+                                bState.x = newWidth - radius - padding;
                             }
-                        });
-                        mainLayer.batchDraw();
-                        groupLayer.batchDraw();
-                        updateAllArrows();
-                    }
-                    
+                        }
+
+                        if (bState.konvaGroup) {
+                            bState.konvaGroup.x(bState.x);
+                        }
+                    });
+
+                    // Shift and constrain all groups
+                    appState.groups.forEach(groupState => {
+                        groupState.x += shiftX;
+
+                        // When shrinking, ensure groups are within bounds
+                        if (widthChange < 0) {
+                            const padding = 10; // 10px padding from the edge
+                             if (groupState.x < padding) {
+                                groupState.x = padding;
+                            }
+                            if (groupState.x + groupState.width > newWidth - padding) {
+                                groupState.x = newWidth - groupState.width - padding;
+                            }
+                        }
+                        if (groupState.konvaGroup) {
+                            groupState.konvaGroup.x(groupState.x);
+                        }
+                    });
+
                     updateBackground();
+                    
+                    // Center main tile
                     if(appState.tileA.konvaGroup) { 
                         appState.tileA.konvaGroup.position({ x: stage.width() / 2, y: stage.height() / 2 }); 
-                        mainLayer.batchDraw();
-                        updateAllArrows();
                     }
+                    
+                    // Redraw everything
+                    mainLayer.batchDraw();
+                    groupLayer.batchDraw();
+                    updateAllArrows();
                 });
 
                 const fieldInputs = [ui.fieldBgColor, ui.bgOpacity, ui.bgImageOpacity, ui.bgScale, ui.bgPosX, ui.bgPosY];
@@ -1618,6 +1643,32 @@
 
             stage.on('mousedown', (e) => {
                 const clickedOnEmpty = e.target === stage || e.target.name() === 'background-rect';
+
+                if (currentlyEditingGroup || currentlyEditingTile) {
+                    let clickedOnEditedItem = false;
+                    if (currentlyEditingGroup) {
+                        const clickedGroupWrapper = e.target.findAncestor('.group-wrapper');
+                        if (clickedGroupWrapper && clickedGroupWrapper.id() === currentlyEditingGroup.id) {
+                            clickedOnEditedItem = true;
+                        }
+                    } else if (currentlyEditingTile) {
+                        if (currentlyEditingTile === 'A') {
+                            if (e.target.findAncestor('#tileA')) {
+                                clickedOnEditedItem = true;
+                            }
+                        } else {
+                            const clickedTileWrapper = e.target.findAncestor('Group', true);
+                            if (clickedTileWrapper && clickedTileWrapper.id() === currentlyEditingTile.id) {
+                                clickedOnEditedItem = true;
+                            }
+                        }
+                    }
+                    
+                    if (!clickedOnEditedItem) {
+                        closePanels();
+                    }
+                }
+
                 if (clickedOnEmpty) {
                     transformer.nodes([]);
                     transformerLayer.batchDraw();
